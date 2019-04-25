@@ -1,6 +1,7 @@
 import glob
 import gzip
 import subprocess
+import os
 
 # Test QTLs from a source file to see whether they're also
 # QTLs of a different (target) type, in the same tissue
@@ -36,8 +37,12 @@ significant_sites = {
                             "/users/mgloud/projects/brain_gwas/data/eqtls/gtex_v8/{0}.allpairs.txt.gz.eQTLs.txt.gz",
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls/{0}.edQTLs.txt.gz",
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls_aggro/{0}.Fisher.combined.sorted.txt.gz"
+                        ],
+                        "/users/mgloud/projects/rna_editing/data/edqtl_signif/top_features/{0}.edFeats.txt.gz"
+                        [
+                            "/users/mgloud/projects/brain_gwas/data/eqtls/gtex_v8/{0}.allpairs.txt.gz.eQTLs.txt.gz",
+                            "/users/mgloud/projects/rna_editing/data/tabix_eqtls_aggro/{0}.Fisher.combined.sorted.txt.gz"
                         ]
-
                     }
 
 
@@ -78,7 +83,10 @@ for source in significant_sites:
             chrom_column = header.index("chr")
             pos_column = header.index("variant_pos")
             id_column = header.index("gene_id")
-            feature_column = header.index("gene_name")
+            if "gene_name" in header:
+                feature_column = header.index("gene_name")
+            else:
+                feature_column = id_column
 
             for line in f:
                 chunks = line.strip().split()
@@ -89,9 +97,18 @@ for source in significant_sites:
                 pos = chunks[pos_column]
                 id = chunks[id_column]
                 feature = chunks[feature_column]
+
+                for t in range(len(all_target))[::-1]:
+                    if not os.path.isfile(all_target[t]):
+                        del all_target[t]
+
                 # For each target file, get the corresponding test(s)
                 for target_qtl in all_target:
 
+                    if not os.path.isfile(target_qtl):
+                        continue
+
+                    # TODO: Move this...
                     with gzip.open(target_qtl) as tq:
                         header = tq.readline().strip().split()
                         second = tq.readline()

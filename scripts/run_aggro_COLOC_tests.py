@@ -9,13 +9,10 @@ def main():
     subprocess.call("rm -rf /users/mgloud/projects/brain_gwas/output/rna-editing-aggro-tests/*", shell=True)
 
     kept_data = []
-    with open("/users/mgloud/projects/rna_editing/output/snps_to_test_gwas1e6_eqtl1e6.txt") as f:
+    with open("/users/mgloud/projects/rna_editing/output/snps_to_test_aggro_gwas1e6_eqtl1e6.txt") as f:
         all_data = []
         f.readline()
         for line in f:
-            # NOTE: Temporary!
-            if "Adipose" not in line:
-                continue
             data = line.strip().split()
             kept_data.append(data)
 
