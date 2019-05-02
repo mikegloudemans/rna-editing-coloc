@@ -104,3 +104,41 @@ dim(aggro_test_only_coloc)
 # Takeaway seems to be that while methods agree in many ways, there's
 # certainly some value to including both.
 
+
+# Checking out a few specific examples now...
+
+# Loci colocalized and tested only in aggro
+aggro_test_only_coloc %>% arrange(coloc_status)
+# CD68, NR2C2, BMPR2 pop out on top right now
+aggro_coloc[aggro_coloc$feature == "CD68",] %>% arrange(-clpp_h4)
+aggro_coloc[aggro_coloc$feature == "NR2C2",] %>% arrange(-clpp_h4)
+aggro_coloc[aggro_coloc$feature == "BMPR2",] %>% arrange(-clpp_h4)
+
+# Loci colocalized and tested only in single site
+single_test_only_coloc %>% arrange(coloc_status)
+
+single_site_coloc[single_site_coloc$gene == "APOC1",] %>% arrange(-clpp)
+single_site_coloc[single_site_coloc$gene == "FUBP1",] %>% arrange(-clpp)
+single_site_coloc[single_site_coloc$gene == "SERPINF2",] %>% arrange(-clpp)
+
+# Loci colocalized only in aggro; tested in both
+aggro_only %>% arrange(coloc_status.y)
+aggro_coloc[aggro_coloc$feature == "CTSA",] %>% arrange(-clpp_h4)
+aggro_coloc[aggro_coloc$feature == "CFLAR",] %>% arrange(-clpp_h4)
+aggro_coloc[aggro_coloc$feature == "ZFP90",] %>% arrange(-clpp_h4)
+aggro_coloc[aggro_coloc$feature == "CTSS",] %>% arrange(-clpp_h4)
+aggro_coloc[aggro_coloc$feature == "SAV1",] %>% arrange(-clpp_h4)
+
+# Loci colocalized only in single-site analysis; tested in both
+single_site_only %>% arrange(coloc_status.x)
+
+single_site_coloc[single_site_coloc$gene == "TRIM65",] %>% arrange(-clpp)
+single_site_coloc[single_site_coloc$gene == "KAT8",] %>% arrange(-clpp)
+single_site_coloc[single_site_coloc$gene == "TCEA3",] %>% arrange(-clpp)
+single_site_coloc[single_site_coloc$gene == "TACC3",] %>% arrange(-clpp)
+single_site_coloc[single_site_coloc$gene == "CLMP",] %>% arrange(-clpp)
+
+
+
+
+
