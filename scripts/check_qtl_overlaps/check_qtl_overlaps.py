@@ -14,8 +14,8 @@ from multiprocessing import Pool
 output_file = "/users/mgloud/projects/rna_editing/output/qtl_comparisons.txt"
 max_cores = 15
 
-# Dictionary mapping source file to target file (target is the tabixed file
-# where we want to try to replicate our QTLs)
+## Dictionary mapping source file to target file (target is the tabixed file
+## where we want to try to replicate our QTLs)
 significant_sites = {
                         "/mnt/lab_data/montgomery/shared/datasets/gtex/GTEx_Analysis_2017-06-05_v8/eqtl/GTEx_Analysis_v8_eQTL/*egenes.txt.gz":
                         [   
@@ -36,6 +36,7 @@ significant_sites = {
                             "/users/mgloud/projects/brain_gwas/data/sqtls/gtex_v8/{0}.allpairs.txt.gz.sQTLs.txt.gz"
                         ]
                     }
+
 
 def main():
     # Write header of output file
