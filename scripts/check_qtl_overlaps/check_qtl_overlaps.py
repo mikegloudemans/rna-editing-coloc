@@ -11,8 +11,8 @@ from multiprocessing import Pool
 # Test QTLs from a source file to see whether they're also
 # QTLs of a different (target) type, in the same tissue
 
-output_file = "/users/mgloud/projects/rna_editing/output/qtl_comparisons.txt"
-max_cores = 15
+output_file = "/users/mgloud/projects/rna_editing/output/qtl_comparisons3.txt"
+max_cores = 40
 
 ## Dictionary mapping source file to target file (target is the tabixed file
 ## where we want to try to replicate our QTLs)
@@ -21,7 +21,7 @@ significant_sites = {
                         [   
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls/{0}.edQTLs.txt.gz",
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls_aggro/{0}.Fisher.combined.sorted.txt.gz",
-                            "/users/mgloud/projects/brain_gwas/data/sqtls/gtex_v8/{0}.allpairs.txt.gz.sQTLs.txt.gz"
+                            "/users/mgloud/projects/brain_gwas/data/sqtls/gtex_v8/{0}.v8.sqtl_allpairs.txt.gz.sQTLs.txt.gz"
                         ],
                         "/mnt/lab_data/montgomery/shared/datasets/gtex/GTEx_Analysis_2017-06-05_v8/sqtl/GTEx_Analysis_v8_sQTL/*sgenes.txt.gz":
                         [
@@ -29,11 +29,11 @@ significant_sites = {
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls/{0}.edQTLs.txt.gz",
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls_aggro/{0}.Fisher.combined.sorted.txt.gz"
                         ],
-                        "/users/mgloud/projects/rna_editing/data/edqtl_signif/top_features/{0}.edFeats.txt.gz":
+                        "/users/mgloud/projects/rna_editing/data/edqtl_signif/top_features/*.edFeats.txt.gz":
                         [
                             "/users/mgloud/projects/brain_gwas/data/eqtls/gtex_v8/{0}.allpairs.txt.gz.eQTLs.txt.gz",
                             "/users/mgloud/projects/rna_editing/data/tabix_eqtls_aggro/{0}.Fisher.combined.sorted.txt.gz",
-                            "/users/mgloud/projects/brain_gwas/data/sqtls/gtex_v8/{0}.allpairs.txt.gz.sQTLs.txt.gz"
+                            "/users/mgloud/projects/brain_gwas/data/sqtls/gtex_v8/{0}.v8.sqtl_allpairs.txt.gz.sQTLs.txt.gz"
                         ]
                     }
 
@@ -54,16 +54,24 @@ def main():
 
             tissue = source_qtl.split("/")[-1].split(".")[0]
 
-            # Get all target files corresponding to the same tissue
             all_target = []
             for s in significant_sites[source]:
                 # Check what separation characters are used for tissue spaces
                 base_dir = "/".join(s.strip().split("/")[:-1])
                 examples = glob.glob(base_dir + "/*.gz")
-                if sum(["-" in e for e in examples]) > 0:
-                    all_target.append(s.format(tissue.replace("_", "-")))
+                if sum(["_" in als.split("/")[-1] for als in all_source]) > 0:
+                    if sum(["_" in e.split("/")[-1] for e in examples]) == 0:
+                        all_target.append(s.format(tissue.replace("_", "-")))
+                    else:
+                        all_target.append(s.format(tissue))
+                elif sum(["_" in als.split("/")[-1] for als in all_source]) == 0:
+                    if sum(["_" in e.split("/")[-1] for e in examples]) > 0:
+                        all_target.append(s.format(tissue.replace("-", "_")))
+                    else:
+                        all_target.append(s.format(tissue))
                 else:
-                    all_target.append(s.format(tissue))
+                    print "We can't handle these file names"
+                    assert False
 
             # Go through file and store significant SNPs for each study
             with gzip.open(source_qtl) as f:
@@ -93,10 +101,10 @@ def parallel_wrapper(line, source_qtl, chrom_column, pos_column, id_column, feat
 
 def process_lines_parallel(line, source_qtl, chrom_column, pos_column, id_column, feature_column, all_target):
     chunks = line.strip().split()
-    print source_qtl
-    print chunks[:5]
-
+    
     chrom = chunks[chrom_column].replace("chr","")
+    if chrom != "1":
+        return
     pos = chunks[pos_column]
     id = chunks[id_column]
     feature = chunks[feature_column]
@@ -111,7 +119,6 @@ def process_lines_parallel(line, source_qtl, chrom_column, pos_column, id_column
         if not os.path.isfile(target_qtl):
             continue
 
-        # TODO: Move this...
         with gzip.open(target_qtl) as tq:
             header = tq.readline().strip().split()
             second = tq.readline()

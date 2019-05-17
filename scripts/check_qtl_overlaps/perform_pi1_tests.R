@@ -21,8 +21,8 @@ fishers = function(x)
 	}
 }
 
-# TODO: remove comment from here
-full_data = read_delim("/users/mgloud/projects/rna_editing/output/qtl_comparisons.txt", delim="\t")
+#full_data = read_delim("/users/mgloud/projects/rna_editing/output/qtl_comparisons.txt", delim="\t")
+full_data = read_delim("/users/mgloud/projects/rna_editing/output/qtl_comparisons2.txt", delim="\t")
 
 possible_sources = c("egenes", "sgenes", "edFeats")
 possible_targets = c("eQTL", "sQTL", "edQTL", "aggro")
