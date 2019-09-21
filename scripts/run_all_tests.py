@@ -6,10 +6,10 @@ import time
 
 def main():
     # Reset things fresh on each run, so we're not mixing results
-    subprocess.call("rm -rf /users/mgloud/projects/brain_gwas/output/rna-editing-tests/*", shell=True)
+    subprocess.call("rm -rf /users/mgloud/projects/brain_gwas/output/rna-editing-tests2/*", shell=True)
 
     kept_data = []
-    with open("/users/mgloud/projects/rna_editing/output/snps_to_test_gwas1e6_eqtl1e6.txt") as f:
+    with open("/users/mgloud/projects/rna_editing/output/test-snps/rna-editing_full-list.txt") as f:
         all_data = []
         f.readline()
         for line in f:
@@ -30,14 +30,16 @@ def main():
         # Add locus to SNP list...but only once for each gene
         with open("/users/mgloud/projects/rna_editing/tmp/snp_list{0}.txt".format(i), "w") as w:
             w.write("{0}\t{1}\t{2}\n".format(test[0], test[1], test[7]))
+
+        # NOTE: We're still estimating the sample sizes for COLOC rather than using the true ones.
                
         # Add corresponding gwas experiment to the list, if not already present
-        temp["gwas_experiments"][test[2]] = {"ref": "1kgenomes", "gwas_format": "pval_only"}
+        temp["gwas_experiments"][test[2]] = {"ref": "1kgenomes", "gwas_format": "pval_only", "N": "10000", "type":"quant"}
         if test[2] != test[4]:
             temp["gwas_experiments"][test[2]]["traits"] = [test[4]]
 
         # Add corresponding eQTL tissue to the list
-        temp["eqtl_experiments"][test[3]] = {"ref": "1kgenomes", "eqtl_format": "pval_only"}
+        temp["eqtl_experiments"][test[3]] = {"ref": "1kgenomes", "eqtl_format": "pval_only", "N": "500"}
 
         # Write config file to the appropriate directory
         with open("/users/mgloud/projects/rna_editing/tmp/lc_config{0}.config".format(i), "w") as w:
@@ -46,12 +48,12 @@ def main():
         # Run the test
         subprocess.call("python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config{0}.config 1 &".format(i), shell=True)
 
-        while int(subprocess.check_output('''ps -ef | grep "python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config" | wc -l''', shell=True)) > 8:
+        while int(subprocess.check_output('''ps -ef | grep "python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config" | wc -l''', shell=True)) > 16:
             time.sleep(5)
 
 template = '''
 {
-        "out_dir_group": "rna-editing-tests",
+        "out_dir_group": "rna-editing-tests2",
 
        "gwas_experiments": 
 	{
@@ -72,7 +74,7 @@ template = '''
 
 	"methods": 
 	{
-		"finemap":{}
+                "coloc": {}
 	},
 
         "ref_genomes": 

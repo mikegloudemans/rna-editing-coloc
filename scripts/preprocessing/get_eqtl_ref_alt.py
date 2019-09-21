@@ -37,11 +37,15 @@ for tissue_dir in glob.glob("/users/mgloud/projects/rna_editing/data/eqtls/*"):
 '''
 
 # Now cycle through eQTL aggro files
-for tissue_dir in glob.glob("/users/mgloud/projects/rna_editing/data/eqtls_aggro/*"):
+for tissue_dir in glob.glob("/users/mgloud/projects/rna_editing/data/edqtl_clusters/editingQLTs_agg_lancaster/*"):
     tissue = tissue_dir.split("/")[-1].split(".")[0]
+    print tissue
 
-    with gzip.open("/users/mgloud/projects/rna_editing/data/eqtls_aggro/{0}.edMat.20cov.60samps.noXYM.qqnorm.bed.QTLtools.nominal.Fisher_combined.with.alleles.txt.gz".format(tissue), "w") as w:
-        with gzip.open("/users/mgloud/projects/rna_editing/data/eqtls_aggro/{0}.edMat.20cov.60samps.noXYM.qqnorm.bed.QTLtools.nominal.Fisher_combined.txt.gz".format(tissue)) as f:
+    if tissue == "All":
+        continue
+
+    with gzip.open("/users/mgloud/projects/rna_editing/data/edqtl_clusters/editingQLTs_agg_lancaster/{0}.edMat.20cov.60samps.noXYM.qqnorm.bed.QTLtools.nominal.Lancaster_agg.cluster.with.alleles.txt.gz".format(tissue), "w") as w:
+        with gzip.open("/users/mgloud/projects/rna_editing/data/edqtl_clusters/editingQLTs_agg_lancaster/{0}.edMat.20cov.60samps.noXYM.qqnorm.bed.QTLtools.nominal.Lancaster_agg.cluster.txt.gz".format(tissue)) as f:
             w.write(f.readline().strip() + "\tref\talt\n")
             for line in f:
                 data = line.strip().split()

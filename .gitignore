@@ -1,0 +1,9 @@
+data
+output
+tmp
+*.pdf
+*nohup.out
+*.gz
+*.swp
+check_qtl_overlaps/images/*
+*.nfs*
