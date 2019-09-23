@@ -6,10 +6,10 @@ import time
 
 def main():
     # Reset things fresh on each run, so we're not mixing results
-    subprocess.call("rm -rf /users/mgloud/projects/brain_gwas/output/rna-editing-tests2/*", shell=True)
+    subprocess.call("rm -rf /users/mgloud/projects/brain_gwas/output/rna-editing-tests-all-coloc/*", shell=True)
 
     kept_data = []
-    with open("/users/mgloud/projects/rna_editing/output/test-snps/rna-editing_full-list.txt") as f:
+    with open("/users/mgloud/projects/rna_editing/output/complex/test-snps/rna-editing_full-list.txt") as f:
         all_data = []
         f.readline()
         for line in f:
@@ -53,7 +53,7 @@ def main():
 
 template = '''
 {
-        "out_dir_group": "rna-editing-tests2",
+        "out_dir_group": "rna-editing-tests-all-coloc",
 
        "gwas_experiments": 
 	{

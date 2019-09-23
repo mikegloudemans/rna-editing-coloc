@@ -13,10 +13,14 @@ import traceback
 
 # Declare constants
 
-max_cores = 12
+top_only_mode = True
+
+max_cores = 24
 
 gwas_pval_threshold = 1e-5
 #gwas_pval_threshold = 5e-8
+
+max_edqtl_distance = 100000
 
 # List GWAS to test (or even just do all?)
 all_gwas = glob.glob("/users/mgloud/projects/rna_editing/data/gwas/*.txt.gz")
@@ -27,12 +31,22 @@ all_gwas = [ag for ag in all_gwas if "Okada_2014" in ag or "Multiple-Sclerosis" 
 all_eqtls = glob.glob("/mnt/lab_data/montgomery/mgloud/rna_editing/data/tabix_eqtls/*.txt.gz")
 
 # temporary
-#all_eqtls = all_eqtls[0:1]
 
 def main():
+
+    if not top_only_mode:
+        valid_qtls = get_eqtl_set(all_eqtls)
+    else:
+        valid_qtls = set([])
+
+    coloc_results = get_coloc_snps()
+    print set([cr[3] for cr in coloc_results])
+
     # For each GWAS file...
     all_test_agreements = {}
     for gwas in all_gwas:
+        print
+        print 
         print gwas
         # Select GWAS SNPs to compare
         # 
@@ -65,9 +79,9 @@ def main():
 
         # For all traits measured in this single GWAS file...
         for trait in all_traits:
+            print 
             print trait
-            '''
-            gwas_hits = snps_by_threshold(gwas, gwas_pval_threshold, trait)
+            gwas_hits = snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
             # Test edQTL directions!
             test_results = test_edqtl_directions(gwas_hits)
 
@@ -76,10 +90,21 @@ def main():
                     all_test_agreements[tr] = {"+": 0, "na": 0, "-": 0}
                 for item in test_results[tr]:
                     all_test_agreements[tr][item] += test_results[tr][item]
-            '''
 
-            gwas_hits = snps_by_tiling(gwas, trait)
-            print len(gwas_hits)
+            # Give only the colocs for the current trait
+            print "Coloc results only:"
+            coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
+            test_results = test_edqtl_directions(gwas_hits, coloc_sub)
+
+            for tr in test_results:
+                if tr + "coloc_only" not in all_test_agreements:
+                    all_test_agreements[tr + "coloc_only"] = {"+": 0, "na": 0, "-": 0}
+                for item in test_results[tr]:
+                    all_test_agreements[tr + "coloc_only"][item] += test_results[tr][item]
+
+            print "Tiled mode:",
+
+            gwas_hits = snps_by_tiling(valid_qtls, gwas, trait)
             # Test edQTL directions!
             test_results = test_edqtl_directions(gwas_hits)
 
@@ -99,7 +124,7 @@ def main():
             
         print all_test_agreements[mode], binom_p
 
-def snps_by_threshold(gwas_file, gwas_threshold, default_trait, window=1000000):
+def snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, window=1000000):
 
     trait = gwas_file
 
@@ -128,10 +153,20 @@ def snps_by_threshold(gwas_file, gwas_threshold, default_trait, window=1000000):
                 pvalue = float(data[pval_index])
             except:
                 continue
+
             chr = data[chr_index]
-            pos = int(data[snp_pos_index])
+            pos = data[snp_pos_index]
+            
+            if not top_only_mode:
+                if (chr.replace("chr", ""), pos) not in valid_qtls:
+                    continue
+
+            pos = int(pos)
+
             if pvalue > gwas_threshold:
                 continue
+
+
 
             direction = data[direction_index]
             ref = data[ref_index]
@@ -173,7 +208,7 @@ def snps_by_threshold(gwas_file, gwas_threshold, default_trait, window=1000000):
     return(snps_to_test)
 
 
-def snps_by_tiling(gwas_file, default_trait, window=1000000):
+def snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
 
     trait = gwas_file
 
@@ -207,7 +242,11 @@ def snps_by_tiling(gwas_file, default_trait, window=1000000):
             except:
                 continue
             chr = data[chr_index].replace("chr", "")
-            pos = int(data[snp_pos_index])
+            pos = data[snp_pos_index]
+            if (chr, pos) not in valid_qtls:
+                continue
+
+            pos = int(pos)
 
             # If we're on the next chromosome, reset
             if current_chrom != chr:
@@ -234,7 +273,7 @@ def snps_by_tiling(gwas_file, default_trait, window=1000000):
 
     return(snps_to_test)
 
-def test_edqtl_directions(gwas_hits):
+def test_edqtl_directions(gwas_hits, coloc_results = None):
 
     agreement = {}
 
@@ -248,12 +287,25 @@ def test_edqtl_directions(gwas_hits):
 
     # Run key SNPs in parallel
     pool = Pool(max_cores)
-    results = pool.map(test_hit_wrapper, gwas_hits)
+    results = pool.map(test_hit_wrapper, [(gh, coloc_results) for gh in gwas_hits])
 
-    for result in results:
+    all_beta = []
+    for result_pair in results:
+        result = result_pair[0]
         for mode in result:
             for value in result[mode]:
                 agreement[mode][value] += result[mode][value]
+        if not (result_pair[1] is None):
+            all_beta.append(result_pair[1])
+
+    print "1-sample T-test with weights:"
+    print stats.ttest_1samp(all_beta, 0)
+
+    ranks = stats.rankdata([abs(a) for a in all_beta])
+    neg_ranks = [ranks[i] for i in range(len(ranks)) if all_beta[i] < 0]
+    pos_ranks = [ranks[i] for i in range(len(ranks)) if all_beta[i] > 0]
+    print "Wilcoxon rank-sum test, neg. vs. positive ranks"
+    print stats.ranksums(neg_ranks, pos_ranks)
 
     # See if binomial test passes in either direction (two-tailed)
     for mode in agreement:
@@ -263,17 +315,21 @@ def test_edqtl_directions(gwas_hits):
         binom_p = 2 * stats.binom.cdf(binom_k, agreement[mode]["+"] + agreement[mode]["-"], 0.5)   # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
         print agreement[mode], binom_p
 
+    
+
     return agreement
 
 
-def test_hit_wrapper(hit):
+def test_hit_wrapper(params):
+    hit = params[0]
+    coloc_results = params[1]
     try:
-        return test_hit(hit)
+        return test_hit(hit, coloc_results)
     except:
         traceback.print_exc(file=sys.stdout)
 
 
-def test_hit(hit):
+def test_hit(hit, coloc_results):
 
     #print hit
     # Get the top editing site across all tissues
@@ -288,6 +344,15 @@ def test_hit(hit):
     for mode in modes:
         my_agreement[mode] = {"+": 0, "na": 0, "-": 0}
 
+    if not (coloc_results is None):
+        print list(coloc_results)[:3]
+        print (str(hit[0]), str(hit[1]).replace("chr", ""))
+        if not (str(hit[0]), str(hit[1]).replace("chr", "")) in coloc_results:
+            for mode in my_agreement:
+                my_agreement[mode]["na"] += 1
+            return my_agreement, None
+
+
     best_pval = 1
     best_feature = None
     best_dir = "na"
@@ -299,6 +364,11 @@ def test_hit(hit):
         for line in info:
 
             data = line.strip().split()
+
+            # Make sure it's close enough to be worth testing
+            if abs(int(data[6])) > max_edqtl_distance:
+                continue
+
             edit_site = data[0]
             pval = float(data[11])
             beta = float(data[12])
@@ -320,7 +390,7 @@ def test_hit(hit):
         #print "No edQTL tested"
         for mode in my_agreement:
             my_agreement[mode]["na"] += 1
-        return my_agreement
+        return my_agreement, None
     
     if best_dir > 0:
         my_agreement["best"]["+"] += 1
@@ -413,8 +483,6 @@ def test_hit(hit):
                 this_snp["+"] += 1
             else:
                 this_snp["-"] += 1
-    # TODO: Experiment with this part to see what works best
-
     
     # Binomial test mode
     # Take this test if binomial test passes in either direction (two-tailed)
@@ -437,7 +505,41 @@ def test_hit(hit):
     else:
         my_agreement["majority"]["na"] += 1
 
-    return my_agreement
+    return my_agreement, tissue_combined 
+
+
+def get_eqtl_set(qtls):
+    snps = set([])
+    for q in qtls:
+        print q
+        with gzip.open(q) as f:
+            f.readline()
+            for line in f:
+                data = line.strip().split()
+                # We're going to limit how far away the SNPs can actually be...
+                if abs(int(data[6])) > max_edqtl_distance:
+                    continue
+                snps.add((data[8].replace("chr", ""), data[9]))
+
+    return snps
+
+def get_coloc_snps():
+    coloc_snps = set([])
+    with open("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt") as f:
+        f.readline()
+        for line in f:
+            data = line.strip().split()
+
+            # Has to be an editing QTL locus
+            if "eQTL" in data[1] or "sQTL" in data[1]:
+                continue
+
+            # Get only colocalizations
+            if float(data[9]) > 0.9:
+                chrom, snp = data[0].split("_")
+                coloc_snps.add((chrom, snp, data[1], data[2], data[3]))
+    return coloc_snps
 
 if __name__ == "__main__":
+    
     main()
