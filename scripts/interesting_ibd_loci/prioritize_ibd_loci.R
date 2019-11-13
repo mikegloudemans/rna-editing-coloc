@@ -41,6 +41,7 @@ ibd_coloc_only$HD = sapply(ibd_coloc_only$ref_snp, function(x)
 				   return(sub$HD[1])
 			   })
 ibd_coloc_only = ibd_coloc_only[!is.na(ibd_coloc_only$HD),]
+
 # Percent of loci where we have at least tested for colocalization
 print(length(unique(ibd_coloc_only$HD)) / length(unique(lifted_hits$HD)))
 
@@ -52,15 +53,21 @@ coloc_threshold = 0.9
 ibd_coloc_summary = ibd_coloc_only %>% group_by(HD) %>% summarize(best_eqtl_coloc = max(clpp_h4[grepl("eQTL", eqtl_file)]), 
 					      best_eqtl_tissue = gsub("_allpairs_txt_gz_eQTLs_txt_gz", "", c("",eqtl_file)[c(which((clpp_h4 == best_eqtl_coloc) & (grepl("eQTL", eqtl_file)))+1,1)[1]]),
 					      best_eqtl_feature = c("",feature)[c(which((clpp_h4 == best_eqtl_coloc) & (grepl("eQTL", eqtl_file)))+1,1)[1]],
+					      best_eqtl_ref_snp = c("",ref_snp)[c(which((clpp_h4 == best_eqtl_coloc) & (grepl("eQTL", eqtl_file)))+1,1)[1]],
+					      best_eqtl_gwas_trait = c("",gwas_trait)[c(which((clpp_h4 == best_eqtl_coloc) & (grepl("eQTL", eqtl_file)))+1,1)[1]],
 					      eqtl_coloc_status = best_eqtl_coloc > coloc_threshold,
 
 					      best_sqtl_coloc = max(clpp_h4[grepl("sQTL", eqtl_file)]), 
 					      best_sqtl_tissue = gsub("_sQTLs_txt_gz", "", c("",eqtl_file)[c(which((clpp_h4 == best_sqtl_coloc) & (grepl("sQTL", eqtl_file)))+1,1)[1]]),
 					      best_sqtl_feature = c("",feature)[c(which((clpp_h4 == best_sqtl_coloc) & (grepl("sQTL", eqtl_file)))+1,1)[1]],
+					      best_sqtl_ref_snp = c("",ref_snp)[c(which((clpp_h4 == best_sqtl_coloc) & (grepl("sQTL", eqtl_file)))+1,1)[1]],
+					      best_sqtl_gwas_trait = c("",gwas_trait)[c(which((clpp_h4 == best_sqtl_coloc) & (grepl("sQTL", eqtl_file)))+1,1)[1]],
 					      sqtl_coloc_status = best_sqtl_coloc > coloc_threshold,
 					      best_edqtl_coloc = max(clpp_h4[grepl("Fisher_combined", eqtl_file)]), 
 					      best_edqtl_tissue = gsub("_Fisher_combined_sorted_txt_gz", "", c("",eqtl_file)[c(which((clpp_h4 == best_edqtl_coloc) & (grepl("Fisher_combined", eqtl_file)))+1,1)[1]]),
 					      best_edqtl_feature = c("",feature)[c(which((clpp_h4 == best_edqtl_coloc) & (grepl("Fisher_combined", eqtl_file)))+1,1)[1]],
+					      best_edqtl_ref_snp = c("",ref_snp)[c(which((clpp_h4 == best_edqtl_coloc) & (grepl("Fisher_combined", eqtl_file)))+1,1)[1]],
+					      best_edqtl_gwas_trait = c("",gwas_trait)[c(which((clpp_h4 == best_edqtl_coloc) & (grepl("Fisher_combined", eqtl_file)))+1,1)[1]],
 					      edqtl_coloc_status = best_edqtl_coloc > coloc_threshold				      
 					      )
 ibd_coloc_summary$best_eqtl_feature = sapply(ibd_coloc_summary$best_eqtl_feature, function(x) {strsplit(x, "\\.")[[1]][1]})
@@ -68,6 +75,13 @@ hgnc = read.table("/users/mgloud/projects/insulin_resistance/scripts/auxiliary/e
 hgnc = hgnc[c("Gene","ID")]
 colnames(hgnc) = c("best_eqtl_feature", "best_eqtl_feature_hgnc")
 ibd_coloc_summary = left_join(ibd_coloc_summary, hgnc)
+
+# Get hg38 coordinates for each locus
+lifted_map = lifted_hits[!duplicated(lifted_hits$HD),]
+lifted_map = lifted_map[c("HD", "chr_hg38", "credible_start_hg38", "credible_end_hg38")]
+
+ibd_coloc_summary = left_join(ibd_coloc_summary, lifted_map)
+
 
 ibd_coloc_summary$best_eqtl_feature_hgnc[is.na(ibd_coloc_summary$best_eqtl_feature_hgnc)] = ""
 ibd_coloc_summary = ibd_coloc_summary[order(as.character(ibd_coloc_summary$best_eqtl_feature_hgnc), decreasing=TRUE),]
@@ -89,14 +103,10 @@ sum(ibd_coloc_summary$edqtl_coloc_status | ibd_coloc_summary$eqtl_coloc_status |
 # Rank QTL types from top to bottom for each locus
 ibd_coloc_summary[c("eqtl_coloc_rank","sqtl_coloc_rank","edqtl_coloc_rank")] = t(apply(ibd_coloc_summary[c("best_eqtl_coloc", "best_sqtl_coloc", "best_edqtl_coloc")], 1, function(x) {rank(-x)}))
 
-ibd_coloc_summary = ibd_coloc_summary[c("HD", "best_edqtl_coloc", "best_edqtl_tissue", "best_edqtl_feature", "edqtl_coloc_status", "best_sqtl_coloc", "best_sqtl_tissue", "best_sqtl_feature", "sqtl_coloc_status", "best_eqtl_coloc", "best_eqtl_tissue", "best_eqtl_feature", "eqtl_coloc_status", "best_eqtl_feature_hgnc", "edqtl_coloc_rank","sqtl_coloc_rank","eqtl_coloc_rank")]
+ibd_coloc_summary = ibd_coloc_summary[c("HD", "chr_hg38", "credible_start_hg38", "credible_end_hg38", "best_edqtl_coloc", "best_edqtl_tissue", "best_edqtl_feature", "best_edqtl_ref_snp", "best_edqtl_gwas_trait", "edqtl_coloc_status", "best_sqtl_coloc", "best_sqtl_tissue", "best_sqtl_feature", "best_sqtl_ref_snp", "best_sqtl_gwas_trait", "sqtl_coloc_status", "best_eqtl_coloc", "best_eqtl_tissue", "best_eqtl_feature", "best_eqtl_ref_snp", "best_eqtl_gwas_trait", "eqtl_coloc_status", "best_eqtl_feature_hgnc", "edqtl_coloc_rank","sqtl_coloc_rank","eqtl_coloc_rank")]
 
 
-write.table(ibd_coloc_summary, "/users/mgloud/projects/rna_editing/scripts/interesting_ibd_loci/ibd_coloc_summary.tsv", sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+write.table(ibd_coloc_summary, "/users/mgloud/projects/rna_editing/output/ibd_analysis/ibd_coloc_summary.tsv", sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
 
 # Check on some of the GWAS loci that we didn't see any tests for...
-gwas_hits[!(gwas_hits$HD %in% ibd_coloc_only$HD),]
-
-# Select a few promising examples
-
-# Re-generate LocusCompare plot for best colocalization of each type at particular locus
+lifted_hits[!(lifted_hits$HD %in% ibd_coloc_only$HD),][c("HD", "chr_hg38", "credible_start_hg38", "credible_end_hg38")]

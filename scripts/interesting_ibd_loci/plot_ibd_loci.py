@@ -22,7 +22,6 @@ def main():
     for i in range(len(kept_data)):
 
         test = kept_data[i]
-        print i, test
         
         temp = json.loads(template)
         temp["snp_list_file"] = "/users/mgloud/projects/rna_editing/tmp/snp_list{0}.txt".format(i)
@@ -35,6 +34,7 @@ def main():
 
         if "Bowel" not in test[2]:
             continue
+        print i, test
 
         # Add corresponding gwas experiment to the list, if not already present
         temp["gwas_experiments"][test[2]] = {"ref": "1kgenomes", "gwas_format": "pval_only", "N": "10000", "type":"quant"}
@@ -51,8 +51,8 @@ def main():
         # Run the test
         subprocess.call("python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config{0}.config 1 &".format(i), shell=True)
 
-        while int(subprocess.check_output('''ps -ef | grep "python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config" | wc -l''', shell=True)) > 16:
-            time.sleep(5)
+        while int(subprocess.check_output('''ps -ef | grep "python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config" | wc -l''', shell=True)) > 32:
+            time.sleep(1)
 
 template = '''
 {
