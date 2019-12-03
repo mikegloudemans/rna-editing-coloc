@@ -7,3 +7,4 @@ tmp
 *.swp
 check_qtl_overlaps/images/*
 *.nfs*
+scripts/preprocessing/upgrade_gwas/munged/
