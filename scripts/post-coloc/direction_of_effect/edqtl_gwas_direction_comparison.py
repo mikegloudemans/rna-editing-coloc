@@ -1,6 +1,7 @@
 # Author: Mike Gloudemans
 # Date created: 2019-09-04
 
+import os
 import subprocess
 import operator
 import gzip
@@ -11,26 +12,58 @@ import numpy as np
 from multiprocessing import Pool
 import traceback
 
-# Declare constants
+import pickle
 
-top_only_mode = True
+#############################
+# Declare settings
+#############################
 
-max_cores = 24
+# Output z-scores for every site?
+output_full_zscores = True
+
+# Should we look only at GWS hits, rather than tile across
+# the entire genome and test effects in every 1MB window?
+skip_tiled_mode = False
+
+# Should we skip the step of filtering down to only colocalized
+# SNPs?
+skip_coloc_filtering = False
+
+# If the lead GWAS SNP wasn't even tested for edQTLs, should
+# we call it an NA? Or should be continue selecting nearby
+# SNPs until one is found that was tested for edQTLs?
+top_only_mode = False
+
+max_cores = 36
 
 gwas_pval_threshold = 1e-5
 #gwas_pval_threshold = 5e-8
 
 max_edqtl_distance = 100000
 
+# Minimum H4 score at which we consider a locus
+# to have colocalization
+#min_coloc_threshold = 0.9
+min_coloc_threshold = 0.5
+
+#############################
+
 # List GWAS to test (or even just do all?)
 all_gwas = glob.glob("/users/mgloud/projects/rna_editing/data/gwas/*.txt.gz")
 
 all_gwas = [ag for ag in all_gwas if "Okada_2014" in ag or "Multiple-Sclerosis" in ag or "Ulcerative-Colitis" in ag or "Coronary-Artery-Disease_Nelson" in ag or "Crohns" in ag or "Inflammatory-Bowel-Disease" in ag or "Type-2-Diabetes" in ag]
+#all_gwas = [ag for ag in all_gwas if "Bowel" in ag]
+
+# Add the immune ones that we downloaded just for this paper
+all_gwas += glob.glob("/users/mgloud/projects/rna_editing/scripts/preprocessing/upgrade_gwas/munged/*/*.gz")
+
+# TODO: Add some negative controls (non-immune traits)
 
 # List directory with eQTLs
 all_eqtls = glob.glob("/mnt/lab_data/montgomery/mgloud/rna_editing/data/tabix_eqtls/*.txt.gz")
 
 # temporary
+#all_eqtls = all_eqtls[:3]
 
 def main():
 
@@ -39,14 +72,21 @@ def main():
     else:
         valid_qtls = set([])
 
-    coloc_results = get_coloc_snps()
-    print set([cr[3] for cr in coloc_results])
 
-    # For each GWAS file...
+    if output_full_zscores:
+        with open("zscore_table.txt", "w") as w:
+            w.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format("gwas_chr", "gwas_pos", "gwas_pval", "gwas_trait", "edit_tissue", "edit_site", "gwas_risk_edqtl_zscore"))
+
+    coloc_results = get_coloc_snps()
+    # ^ list of snps in tuple form (chrom, snp, eqtl_file, gwas_trait, feature)
+    # It's already filtered down to the list of SNPs that actually colocalized
+
+    # Dictionary to record concordance agreement status for several different types of concordance tests
+    # across ALL GWAS (not just a single study for this one)
     all_test_agreements = {}
+    # For each GWAS file...
     for gwas in all_gwas:
         print
-        print 
         print gwas
         # Select GWAS SNPs to compare
         # 
@@ -57,33 +97,27 @@ def main():
         # Let's try the second option to start, since we have code to do it already
         #
 
-        all_traits = set([])
         # Get list traits for GWAS file
-        with gzip.open(gwas) as f:
-            head = f.readline().strip().split("\t")
-            if "effect_direction" not in head or "effect_allele" not in head or "non_effect_allele" not in head:
-                continue
-            if "trait" in head:
-                trait_index = head.index("trait")
-                i = 0
-                for line in f:
-                    if i > 100000:
-                        break
-                    data = line.strip().split("\t")
-                    all_traits.add(data[trait_index])
-                    i += 1
-            else:
-                all_traits.add(gwas)
+        all_traits = get_traits_in_file(gwas)
 
-        all_traits = list(all_traits)
-
+        if all_traits is None:
+            continue
+        
         # For all traits measured in this single GWAS file...
         for trait in all_traits:
+
+            ################################################
+            # Test concordance, GWAS lead SNPs only,
+            # no coloc filtering
+            ################################################
             print 
+            print gwas
             print trait
+            # Get all SNPs with p-value below our chosen threshold
             gwas_hits = snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
             # Test edQTL directions!
-            test_results = test_edqtl_directions(gwas_hits)
+            # Also, output all the z-scores for these tests if it's been requested
+            test_results = test_edqtl_directions(gwas_hits, output_full_zscores = output_full_zscores)
 
             for tr in test_results:
                 if tr not in all_test_agreements:
@@ -91,36 +125,51 @@ def main():
                 for item in test_results[tr]:
                     all_test_agreements[tr][item] += test_results[tr][item]
 
-            # Give only the colocs for the current trait
-            print "Coloc results only:"
-            coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
-            test_results = test_edqtl_directions(gwas_hits, coloc_sub)
+            if not skip_coloc_filtering:
 
-            for tr in test_results:
-                if tr + "coloc_only" not in all_test_agreements:
-                    all_test_agreements[tr + "coloc_only"] = {"+": 0, "na": 0, "-": 0}
-                for item in test_results[tr]:
-                    all_test_agreements[tr + "coloc_only"][item] += test_results[tr][item]
+                ########################################################
+                # Test concordance, GWAS lead SNPs only,
+                # subsetting to SNPs colocalized for current GWAS trait
+                ########################################################
 
-            print "Tiled mode:",
+                print "Coloc results only:"
+                coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
+                test_results = test_edqtl_directions(gwas_hits, coloc_sub)
 
-            gwas_hits = snps_by_tiling(valid_qtls, gwas, trait)
-            # Test edQTL directions!
-            test_results = test_edqtl_directions(gwas_hits)
+                for tr in test_results:
+                    if tr + "coloc_only" not in all_test_agreements:
+                        all_test_agreements[tr + "coloc_only"] = {"+": 0, "na": 0, "-": 0}
+                    for item in test_results[tr]:
+                        all_test_agreements[tr + "coloc_only"][item] += test_results[tr][item]
 
-            for tr in test_results:
-                if tr + "tiled" not in all_test_agreements:
-                    all_test_agreements[tr + "tiled"] = {"+": 0, "na": 0, "-": 0}
-                for item in test_results[tr]:
-                    all_test_agreements[tr + "tiled"][item] += test_results[tr][item]
+            # We can opt to skip the next part to save time
+            if not skip_tiled_mode:
+            
+                ################################################
+                # Test concordance, one SNP from every chunk,
+                # no coloc filtering
+                ################################################
+                print "Tiled mode:",
 
+                gwas_hits = snps_by_tiling(valid_qtls, gwas, trait)
+                # Test edQTL directions!
+                test_results = test_edqtl_directions(gwas_hits)
+
+                for tr in test_results:
+                    if tr + "tiled" not in all_test_agreements:
+                        all_test_agreements[tr + "tiled"] = {"+": 0, "na": 0, "-": 0}
+                    for item in test_results[tr]:
+                        all_test_agreements[tr + "tiled"][item] += test_results[tr][item]
+
+    # For ALL traits combined...
     # See if binomial test passes in either direction (two-tailed)
     print "All tests together:"
     for mode in all_test_agreements:
         print mode
         binom_k = min(all_test_agreements[mode]["+"], all_test_agreements[mode]["-"])
         # Get prob of seeing a result more extreme than this, in either direction
-        binom_p = 2 * stats.binom.cdf(binom_k, all_test_agreements[mode]["+"] + all_test_agreements[mode]["-"], 0.5)   # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
+        binom_p = 2 * stats.binom.cdf(binom_k, all_test_agreements[mode]["+"] + all_test_agreements[mode]["-"], 0.5)   
+        # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
             
         print all_test_agreements[mode], binom_p
 
@@ -156,7 +205,11 @@ def snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, wind
 
             chr = data[chr_index]
             pos = data[snp_pos_index]
-            
+           
+            # If this speed-up parameter isn't set, then we should keep
+            # successively picking additional GWAS SNPs until we run out
+            # or until we find one that was actually tested for eQTLs in
+            # the first place
             if not top_only_mode:
                 if (chr.replace("chr", ""), pos) not in valid_qtls:
                     continue
@@ -165,8 +218,6 @@ def snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, wind
 
             if pvalue > gwas_threshold:
                 continue
-
-
 
             direction = data[direction_index]
             ref = data[ref_index]
@@ -243,8 +294,14 @@ def snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
                 continue
             chr = data[chr_index].replace("chr", "")
             pos = data[snp_pos_index]
-            if (chr, pos) not in valid_qtls:
-                continue
+            
+            # If this speed-up parameter isn't set, then we should keep
+            # successively picking additional GWAS SNPs until we run out
+            # or until we find one that was actually tested for eQTLs in
+            # the first place
+            if not top_only_mode:
+                if (chr, pos) not in valid_qtls:
+                    continue
 
             pos = int(pos)
 
@@ -273,22 +330,35 @@ def snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
 
     return(snps_to_test)
 
-def test_edqtl_directions(gwas_hits, coloc_results = None):
+def test_edqtl_directions(gwas_hits, coloc_results = None, output_full_zscores=False):
 
-    agreement = {}
-
+    # Names for all the ways we want to test the directional agreement
     modes = ["binomial", \
             "best", \
             "majority",
             "combined-tissue", \
             "combined-tissue-and-sites"]
+
+    # Dictionary to show the number of agreements vs. disagreements for each
+    # test type
+    #
+    # "agreement" or "+" means the allele that increases RNA editing levels
+    # also increases the risk of disease.
+    #
+    # "disagreement" or "-" means the allele that increases RNA editing levels
+    # decreases the risk of disease.
+    #
+    agreement = {}
     for mode in modes:
         agreement[mode] = {"+": 0, "na": 0, "-": 0}
 
-    # Run key SNPs in parallel
+    # Test SNPs for agreement in parallel, to save time
     pool = Pool(max_cores)
-    results = pool.map(test_hit_wrapper, [(gh, coloc_results) for gh in gwas_hits])
+    results = pool.map(test_hit_wrapper, [(gh, coloc_results, output_full_zscores) for gh in gwas_hits])
 
+    # Total up the test results for all different tested SNPs
+    # and also keep a record of all the combined z-scores for the
+    # tissue-combined tests
     all_beta = []
     for result_pair in results:
         result = result_pair[0]
@@ -298,9 +368,11 @@ def test_edqtl_directions(gwas_hits, coloc_results = None):
         if not (result_pair[1] is None):
             all_beta.append(result_pair[1])
 
+    # Is the average edQTL effect size of a GWAS SNP non-zero?
     print "1-sample T-test with weights:"
     print stats.ttest_1samp(all_beta, 0)
 
+    # Not sure if this is that great of a test for this but...
     ranks = stats.rankdata([abs(a) for a in all_beta])
     neg_ranks = [ranks[i] for i in range(len(ranks)) if all_beta[i] < 0]
     pos_ranks = [ranks[i] for i in range(len(ranks)) if all_beta[i] > 0]
@@ -313,29 +385,30 @@ def test_edqtl_directions(gwas_hits, coloc_results = None):
         binom_k = min(agreement[mode]["+"], agreement[mode]["-"])
         # Get prob of seeing a result more extreme than this, in either direction
         binom_p = 2 * stats.binom.cdf(binom_k, agreement[mode]["+"] + agreement[mode]["-"], 0.5)   # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
-        print agreement[mode], binom_p
-
-    
+        print agreement[mode], binom_p 
 
     return agreement
 
-
+# Nothing special, just a wrapper that prints the
+# traceback message if our spawned threads fail.
 def test_hit_wrapper(params):
     hit = params[0]
     coloc_results = params[1]
+    output_full_zscores = params[2]
     try:
-        return test_hit(hit, coloc_results)
+        return test_hit(hit, coloc_results, output_full_zscores)
     except:
         traceback.print_exc(file=sys.stdout)
 
+# If coloc_results is None, include the hit no matter what 
+# Otherwise, skip the hit if it is not colocalized
+def test_hit(hit, coloc_results=None, output_full_zscores=False):
 
-def test_hit(hit, coloc_results):
-
-    #print hit
-    # Get the top editing site across all tissues
-    # But also save all editing sites in all tissues
+    # Z-scores for all editing sites in all tissues tested for association with the GWAS hit
     all_edits = {}
+    # Results of concordance testing under various approaches
     my_agreement = {}
+    # The different ways of testing for concordance
     modes = ["binomial", \
             "best", \
             "majority",
@@ -344,20 +417,39 @@ def test_hit(hit, coloc_results):
     for mode in modes:
         my_agreement[mode] = {"+": 0, "na": 0, "-": 0}
 
+    # If we are filtering by coloc results (i.e. we have passed a list
+    # of coloc SNPs to filter down to), then we run this block to skip SNPs that
+    # didn't colocalize. Otherwise, coloc_results defaults to None and we skip
+    # this block.
     if not (coloc_results is None):
-        print list(coloc_results)[:3]
-        print (str(hit[0]), str(hit[1]).replace("chr", ""))
         if not (str(hit[0]), str(hit[1]).replace("chr", "")) in coloc_results:
             for mode in my_agreement:
                 my_agreement[mode]["na"] += 1
             return my_agreement, None
+        
+    # In the GWAS, is the alt allele the one that increases risk?
+    if hit[4] == "+":
+        gwas_alt_increases_risk = True
+    elif hit[4] == "-":
+        gwas_alt_increases_risk = False
+    else:
+        #print "Invalid GWAS effect direction", hit[4]
+        for mode in my_agreement:
+            my_agreement[mode]["na"] += 1
+        return my_agreement, None
 
+    gwas_ref = hit[5].upper()
+    gwas_alt = hit[6].upper()
 
-    best_pval = 1
-    best_feature = None
-    best_dir = "na"
-    for aq in all_eqtls:
-        out = subprocess.check_output(["tabix", aq, "chr{0}:{1}-{2}".format(hit[0], hit[1], hit[1])]).strip()
+    best_edqtl_pval = 1
+    best_edit_site = None
+    best_edqtl_direction = "na"
+
+    # Loop through all edQTL tissues
+    for edqtl_tissue in all_eqtls:
+        tissue_short_name = edqtl_tissue.strip().split("/")[-1].split("\.")[0]
+        # Get the editing sites that were tested for association with the GWAS SNP
+        out = subprocess.check_output(["tabix", edqtl_tissue, "chr{0}:{1}-{2}".format(hit[0], hit[1], hit[1])]).strip()
         if out == "":
             continue
         info = out.strip().split("\n")
@@ -370,44 +462,83 @@ def test_hit(hit, coloc_results):
                 continue
 
             edit_site = data[0]
-            pval = float(data[11])
-            beta = float(data[12])
+            edqtl_pval = float(data[11])
+            edqtl_beta = float(data[12])
 
-            zscore = stats.norm.ppf(pval / 2)
-            if beta > 0:
-                zscore *= -1
+            edqtl_ref = data[14].upper()
+            edqtl_alt = data[15].upper()
 
+            # In the QTL study, is the alt allele the one that increases editing?
+            edqtl_alt_increases_editing = edqtl_beta > 0
+
+            # If the GWAS and the QTL study have opposite designations for ref/alt,
+            # then flip the direction of effect so it corresponds to matching 
+            # ref/alt designation
+            if gwas_ref == edqtl_ref and gwas_alt == edqtl_alt:
+                gwas_alt_increases_editing = edqtl_alt_increases_editing
+            elif gwas_ref == edqtl_alt and gwas_alt == edqtl_ref:
+                # Flip direction to match pval with GWAS
+                #print "flip", ref, alt,
+                gwas_alt_increases_editing = not edqtl_alt_increases_editing
+            else:
+                # Ref/alt don't match
+                continue
+
+            # Does the editing-increasing allele also increase GWAS risk?
+            risk_increases_editing = (gwas_alt_increases_risk == gwas_alt_increases_editing)
+
+            # Convert the p-value to a signed z-score, which will be necessary
+            # when we combine across tissues or across editing sites
+            gwas_risk_edqtl_zscore = stats.norm.ppf(edqtl_pval / 2) 
+            if not risk_increases_editing:
+                # Get the direction of the effect
+                gwas_risk_edqtl_zscore *= -1
+
+            # Keep track of all the signed zscores for this editing site,
+            # across tissues
             if edit_site not in all_edits:
                 all_edits[edit_site] = []
-            all_edits[edit_site].append(round(zscore,2))
+            all_edits[edit_site].append(round(gwas_risk_edqtl_zscore,2))
 
-            if pval < best_pval:
-                best_pval = pval
-                best_feature = edit_site
-                best_dir = beta
+            if output_full_zscores:
+                with open("zscore_table.txt", "a") as a:
+                    a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(hit[0], hit[1], hit[2], hit[3], tissue_short_name, edit_site, gwas_risk_edqtl_zscore))
 
-    if best_pval == 1:
-        #print "No edQTL tested"
+            # Track which editing site has the strongest association with this GWAS hit,
+            # across all sites and tissues
+            if edqtl_pval < best_edqtl_pval:
+                best_edqtl_pval = edqtl_pval
+                best_edit_site = edit_site
+                best_edqtl_direction = gwas_risk_edqtl_zscore
+
+    if best_edqtl_pval == 1:
+        # No edQTLs were tested for this site, so we can't say anything about it
+        # for any of the possible concordance testing methods
         for mode in my_agreement:
             my_agreement[mode]["na"] += 1
         return my_agreement, None
+
+    ###################################
+    # Test: Best snp only
+    ###################################
     
-    if best_dir > 0:
+    # Test: If we look at only the MOST impactful edQTL association, was it an agreement
+    # or a disagreement?
+    if best_edqtl_direction > 0:
         my_agreement["best"]["+"] += 1
-    elif best_dir < 0:
+    elif best_edqtl_direction < 0:
         my_agreement["best"]["-"] += 1
     else:
         my_agreement["best"]["na"] += 1
 
-    # Stouffer's combined
-    # Start by just taking the MEAN of all Z-scores, since
-    # we don't really
+    ###################################
+    # Test: Best site, across tissues
+    ##################################
+    
+    # Stouffer's combined z-score
 
     # Combining the best site (from one individual tissue) across all tissues
-    tissue_combined = sum(all_edits[best_feature]) / (len(all_edits[best_feature])**(0.5))
-
-    #print all_edits[best_feature]
-    #print tissue_combined
+    tissue_combined = sum(all_edits[best_edit_site]) / (len(all_edits[best_edit_site])**(0.5))
 
     if tissue_combined > 0:
         my_agreement["combined-tissue"]["+"] += 1
@@ -415,18 +546,17 @@ def test_hit(hit, coloc_results):
         my_agreement["combined-tissue"]["-"] += 1
     else:
         my_agreement["combined-tissue"]["na"] += 1
+    
+    ###################################
+    # Test: Combined across tissues, then across sites
+    ###################################
 
-    # Combined each site across all tissues, and then combining all sites
+    # Stouffer's combined z-score
     z_vec = []
     for site in all_edits:
         tissue_combined = sum(all_edits[site]) / (len(all_edits[site]) ** (0.5))
         z_vec.append(round(tissue_combined,2))
-        #print tissue_combined, all_edits[site]
     tissue_combined_site_combined = sum(z_vec) / (len(z_vec) ** (0.5))
-    #print "-------"
-    #print z_vec
-    #print tissue_combined_site_combined
-    #print
 
     if tissue_combined_site_combined > 0:
         my_agreement["combined-tissue-and-sites"]["+"] += 1
@@ -434,57 +564,32 @@ def test_hit(hit, coloc_results):
         my_agreement["combined-tissue-and-sites"]["-"] += 1
     else:
         my_agreement["combined-tissue-and-sites"]["na"] += 1
-
-
-    #print best_pval
-
+    
+    ###################################
+    # Test: Best site, vote across tissues
+    ###################################
+    
     # Then at that top editing site, count support in favor of either
     # direction, across tissues.
-    # For now, we'll only look at that one single editing site.
-    this_snp = {"+": 0, "-": 0}
-    for aq in all_eqtls:
-        out = subprocess.check_output(["tabix", aq, "chr{0}:{1}-{2}".format(hit[0], hit[1], hit[1])]).strip()
-        if out == "":
-            # This feature wasn't tested for this tissue at this SNP
-            continue
-        info = out.strip().split("\n")
-        for line in info:
-            data = line.strip().split()
-            if data[0] != best_feature:
-                continue
-            # Once we find the effect size of the GWAS SNP on the
-            # feature of interest in this tissue...
-            beta = float(data[12])
-            #print beta,
-            ref = data[14].upper()
-            alt = data[15].upper()
+    #
+    # For now, we'll only look at that one single best editing site that 
+    # we already determined in a previous step
+    #
 
-            if hit[4] == "+":
-                gwas_alt_dir = True
-            elif hit[4] == "-":
-                gwas_alt_dir = False
-            else:
-                #print "Invalid GWAS effect direction", hit[4]
-                continue
-
-            qtl_alt_dir = beta > 0
-
-            if hit[5].upper() == ref and hit[6].upper() == alt:
-                pass
-            elif hit[5].upper() == alt and hit[6].upper() == ref:
-                # Flip direction to match pval with GWAS
-                #print "flip", ref, alt,
-                qtl_alt_dir = not qtl_alt_dir
-            else:
-                #print "Ref/alt don't match:", hit[5], hit[6], alt, ref
-                continue
-            same_direction = not (qtl_alt_dir ^ gwas_alt_dir)
-            if same_direction:
-                this_snp["+"] += 1
-            else:
-                this_snp["-"] += 1
+    # In how many tissues does the edQTL and GWAS effect direction match vs. not?
+    this_snp = {"+": sum([z > 0 for z in all_edits[best_edit_site]]), "-": sum([z < 0 for z in all_edits[best_edit_site]])}
     
-    # Binomial test mode
+    if this_snp["+"] > this_snp["-"]:
+       my_agreement["majority"]["+"] += 1
+    elif this_snp["-"] > this_snp["+"]:
+        my_agreement["majority"]["-"] += 1
+    else:
+        my_agreement["majority"]["na"] += 1
+
+    #########################################
+    # Test: binomial
+    #########################################
+
     # Take this test if binomial test passes in either direction (two-tailed)
     binom_k = min(this_snp["+"], this_snp["-"])
     # Get prob of seeing a result more extreme than this, in either direction
@@ -497,19 +602,22 @@ def test_hit(hit, coloc_results):
     else:
         my_agreement["binomial"]["na"] += 1
 
-    # No binomial mode
-    if this_snp["+"] > this_snp["-"]:
-       my_agreement["majority"]["+"] += 1
-    elif this_snp["-"] > this_snp["+"]:
-        my_agreement["majority"]["-"] += 1
-    else:
-        my_agreement["majority"]["na"] += 1
-
+    # Final test results include all the different test modes
     return my_agreement, tissue_combined 
 
-
+# Create a set containing every single SNP that was tested for
+# edQTL association in at least one tissue
+# {(chrom, pos), ....}
+# 
+# It would be nice to make this faster, but probably not possible because
+# you can only read the disk so fast...
 def get_eqtl_set(qtls):
+    pickle_file = "all_edqtl_{0}.pkl".format(max_edqtl_distance)
+    if os.path.exists(pickle_file):
+        with open(pickle_file) as f:
+            return pickle.load(f)
     snps = set([])
+    # For each edQTL tissue...
     for q in qtls:
         print q
         with gzip.open(q) as f:
@@ -517,12 +625,18 @@ def get_eqtl_set(qtls):
             for line in f:
                 data = line.strip().split()
                 # We're going to limit how far away the SNPs can actually be...
+                # this improves the reliability of our set of edQTL associations
                 if abs(int(data[6])) > max_edqtl_distance:
                     continue
                 snps.add((data[8].replace("chr", ""), data[9]))
 
+    with open(pickle_file, "w") as pkl:
+        pickle.dump(snps, pkl)
+
     return snps
 
+# List of tuples representing SNPs that achieved colocalization
+# [ (chrom, snp, eqtl_file, gwas_trait, feature) , ...]
 def get_coloc_snps():
     coloc_snps = set([])
     with open("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt") as f:
@@ -535,10 +649,38 @@ def get_coloc_snps():
                 continue
 
             # Get only colocalizations
-            if float(data[9]) > 0.9:
+            if float(data[9]) >= min_coloc_threshold:
                 chrom, snp = data[0].split("_")
+                # (chrom, snp, eqtl_file, gwas_trait, feature)
                 coloc_snps.add((chrom, snp, data[1], data[2], data[3]))
     return coloc_snps
+
+# List all the traits in a gwas file
+# by reading from the "trait" column if it exists
+def get_traits_in_file(gwas):
+        all_traits = set([])
+        with gzip.open(gwas) as f:
+            head = f.readline().strip().split("\t")
+            if "effect_direction" not in head or "effect_allele" not in head or "non_effect_allele" not in head:
+                # Signal to skip this trait if the effect direction isn't even obtainable
+                return None
+            if "trait" in head:
+                trait_index = head.index("trait")
+                i = 0
+                for line in f:
+                    # We assume the trait appears at least once in the first 100k lines of the file, since
+                    # the file should be sorted by position and not by trait
+                    if i > 100000:
+                        break
+                    data = line.strip().split("\t")
+                    all_traits.add(data[trait_index])
+                    i += 1
+            else:
+                all_traits.add(gwas)
+
+        all_traits = list(all_traits)
+
+        return all_traits
 
 if __name__ == "__main__":
     
