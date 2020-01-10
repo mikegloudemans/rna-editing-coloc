@@ -41,6 +41,9 @@ gwas_pval_threshold = 1e-5
 
 max_edqtl_distance = 100000
 
+# How big of chunks should we break the genome into for the tiling approach?
+tiling_window = 5000000
+
 # Minimum H4 score at which we consider a locus
 # to have colocalization
 #min_coloc_threshold = 0.9
@@ -56,6 +59,9 @@ all_gwas = [ag for ag in all_gwas if "Okada_2014" in ag or "Multiple-Sclerosis" 
 
 # Add the immune ones that we downloaded just for this paper
 all_gwas += glob.glob("/users/mgloud/projects/rna_editing/scripts/preprocessing/upgrade_gwas/munged/*/*.gz")
+
+# Vitilogo GWAS has problems because not filtered properly for allele frequency; deal with this one later
+all_gwas = [ag for ag in all_gwas if "Viti" not in ag]
 
 # TODO: Add some negative controls (non-immune traits)
 
@@ -151,7 +157,7 @@ def main():
                 ################################################
                 print "Tiled mode:",
 
-                gwas_hits = snps_by_tiling(valid_qtls, gwas, trait)
+                gwas_hits = snps_by_tiling(valid_qtls, gwas, trait, tiling_window)
                 # Test edQTL directions!
                 test_results = test_edqtl_directions(gwas_hits)
 
@@ -502,7 +508,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
 
             if output_full_zscores:
                 with open("zscore_table.txt", "a") as a:
-                    a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(hit[0], hit[1], hit[2], hit[3], tissue_short_name, edit_site, gwas_risk_edqtl_zscore))
+                    a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(hit[0], hit[1], hit[2], hit[3].split("/")[-1], tissue_short_name, edit_site, gwas_risk_edqtl_zscore))
 
             # Track which editing site has the strongest association with this GWAS hit,
             # across all sites and tissues
