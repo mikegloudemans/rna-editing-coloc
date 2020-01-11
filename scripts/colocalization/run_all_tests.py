@@ -6,10 +6,10 @@ import time
 
 def main():
     # Reset things fresh on each run, so we're not mixing results
-    subprocess.call("rm -rf /users/mgloud/projects/brain_gwas/output/rna-editing-tests-all-coloc/*", shell=True)
+    subprocess.call("rm -rf ../../output/colocalization/main_coloc_results/raw_coloc_output/*", shell=True)
 
     kept_data = []
-    with open("/users/mgloud/projects/rna_editing/output/complex/test-snps/rna-editing_full-list.txt") as f:
+    with open("../../output/test-snps/rna-editing_full-list.txt") as f:
         all_data = []
         f.readline()
         for line in f:
@@ -25,10 +25,10 @@ def main():
         print test
         
         temp = json.loads(template)
-        temp["snp_list_file"] = "/users/mgloud/projects/rna_editing/tmp/snp_list{0}.txt".format(i)
+        temp["snp_list_file"] = "../../tmp/snp_list{0}.txt".format(i)
 
         # Add locus to SNP list...but only once for each gene
-        with open("/users/mgloud/projects/rna_editing/tmp/snp_list{0}.txt".format(i), "w") as w:
+        with open("../../tmp/snp_list{0}.txt".format(i), "w") as w:
             w.write("{0}\t{1}\t{2}\n".format(test[0], test[1], test[7]))
 
         # NOTE: We're still estimating the sample sizes for COLOC rather than using the true ones.
@@ -42,14 +42,18 @@ def main():
         temp["eqtl_experiments"][test[3]] = {"ref": "1kgenomes", "eqtl_format": "pval_only", "N": "500"}
 
         # Write config file to the appropriate directory
-        with open("/users/mgloud/projects/rna_editing/tmp/lc_config{0}.config".format(i), "w") as w:
+        with open("../../tmp/lc_config{0}.config".format(i), "w") as w:
             json.dump(temp, w)
 
         # Run the test
-        subprocess.call("python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config{0}.config 1 &".format(i), shell=True)
+        subprocess.call("python ../../bin/coloc_pipeline/dispatch.py ../../tmp/lc_config{0}.config 1 &".format(i), shell=True)
 
-        while int(subprocess.check_output('''ps -ef | grep "python /users/mgloud/projects/brain_gwas/scripts/dispatch.py /users/mgloud/projects/rna_editing/tmp/lc_config" | wc -l''', shell=True)) > 16:
+        while int(subprocess.check_output('''ps -ef | grep "python ../../bin/coloc_pipeline/dispatch.py ../../tmp/lc_config" | wc -l''', shell=True)) > 16:
             time.sleep(5)
+
+
+subprocess.call("rm -rf ../../tmp/lc_config*", shell=True)
+subprocess.call("rm -rf ../../tmp/snp_list*", shell=True)
 
 template = '''
 {
@@ -70,7 +74,7 @@ template = '''
 		"snps_from_list",
 
 	"snp_list_file":
-                "/users/mgloud/projects/rna_editing/tmp/snp_list.txt",
+                "../../tmp/snp_list.txt",
 
 	"methods": 
 	{
