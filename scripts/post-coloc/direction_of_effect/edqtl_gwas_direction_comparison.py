@@ -51,14 +51,8 @@ min_coloc_threshold = 0.5
 
 #############################
 
-# List GWAS to test (or even just do all?)
-all_gwas = glob.glob("/users/mgloud/projects/rna_editing/data/gwas/*.txt.gz")
-
-all_gwas = [ag for ag in all_gwas if "Okada_2014" in ag or "Multiple-Sclerosis" in ag or "Ulcerative-Colitis" in ag or "Coronary-Artery-Disease_Nelson" in ag or "Crohns" in ag or "Inflammatory-Bowel-Disease" in ag or "Type-2-Diabetes" in ag]
-#all_gwas = [ag for ag in all_gwas if "Bowel" in ag]
-
-# Add the immune ones that we downloaded just for this paper
-all_gwas += glob.glob("/users/mgloud/projects/rna_editing/scripts/preprocessing/upgrade_gwas/munged/*/*.gz")
+# List GWAS to test
+all_gwas = glob.glob("../../../data/new_immune_gwas/munged/*/*.gz")
 
 # Vitilogo GWAS has problems because not filtered properly for allele frequency; deal with this one later
 all_gwas = [ag for ag in all_gwas if "Viti" not in ag]
@@ -66,10 +60,7 @@ all_gwas = [ag for ag in all_gwas if "Viti" not in ag]
 # TODO: Add some negative controls (non-immune traits)
 
 # List directory with eQTLs
-all_eqtls = glob.glob("/mnt/lab_data/montgomery/mgloud/rna_editing/data/tabix_eqtls/*.txt.gz")
-
-# temporary
-#all_eqtls = all_eqtls[:3]
+all_eqtls = glob.glob("../../../data/tabix_eqtls/*.txt.gz")
 
 def main():
 
@@ -78,10 +69,14 @@ def main():
     else:
         valid_qtls = set([])
 
-
+    # Write header to z-score file
     if output_full_zscores:
-        with open("zscore_table.txt", "w") as w:
+        with open("../../../output/direction_of_effect/zscore_table.txt", "w") as w:
             w.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format("gwas_chr", "gwas_pos", "gwas_pval", "gwas_trait", "edit_tissue", "edit_site", "gwas_risk_edqtl_zscore"))
+
+    # Write header to main results file
+    with open("../../../output/direction_of_effect/main_results_table.txt", "w") as w:
+        w.write("gwas_trait\ttest_mode\tsnp_set\tnum_positive\tnum_negative\tnum_na\n")
 
     coloc_results = get_coloc_snps()
     # ^ list of snps in tuple form (chrom, snp, eqtl_file, gwas_trait, feature)
@@ -120,16 +115,23 @@ def main():
             print gwas
             print trait
             # Get all SNPs with p-value below our chosen threshold
-            gwas_hits = snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
+            gwas_hits = gwas_snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
             # Test edQTL directions!
             # Also, output all the z-scores for these tests if it's been requested
             test_results = test_edqtl_directions(gwas_hits, output_full_zscores = output_full_zscores)
 
-            for tr in test_results:
-                if tr not in all_test_agreements:
-                    all_test_agreements[tr] = {"+": 0, "na": 0, "-": 0}
-                for item in test_results[tr]:
-                    all_test_agreements[tr][item] += test_results[tr][item]
+            with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+                for tr in test_results:
+                    # Add results to the cumulative total
+                    if "gwas_hits" not in all_test_agreements:
+                        all_test_agreements["gwas_hits"] = {}
+                    if tr not in all_test_agreements["gwas_hits"]:
+                        all_test_agreements["gwas_hits"][tr] = {"+": 0, "na": 0, "-": 0}
+                    for item in test_results[tr]:
+                        all_test_agreements["gwas_hits"][tr][item] += test_results[tr][item]
+
+                    # Write results to main results file
+                    a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "gwas_hits", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
 
             if not skip_coloc_filtering:
 
@@ -142,11 +144,18 @@ def main():
                 coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
                 test_results = test_edqtl_directions(gwas_hits, coloc_sub)
 
-                for tr in test_results:
-                    if tr + "coloc_only" not in all_test_agreements:
-                        all_test_agreements[tr + "coloc_only"] = {"+": 0, "na": 0, "-": 0}
-                    for item in test_results[tr]:
-                        all_test_agreements[tr + "coloc_only"][item] += test_results[tr][item]
+                with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+                    for tr in test_results:
+                        # Add results to the cumulative total
+                        if "coloc_only" not in all_test_agreements:
+                            all_test_agreements["coloc_only"] = {}
+                        if tr not in all_test_agreements["coloc_only"]:
+                            all_test_agreements["coloc_only"][tr] = {"+": 0, "na": 0, "-": 0}
+                        for item in test_results[tr]:
+                            all_test_agreements["coloc_only"][tr][item] += test_results[tr][item]
+
+                        # Write results to main results file
+                        a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "coloc_only", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
 
             # We can opt to skip the next part to save time
             if not skip_tiled_mode:
@@ -157,29 +166,42 @@ def main():
                 ################################################
                 print "Tiled mode:",
 
-                gwas_hits = snps_by_tiling(valid_qtls, gwas, trait, tiling_window)
+                gwas_hits = gwas_snps_by_tiling(valid_qtls, gwas, trait, tiling_window)
                 # Test edQTL directions!
                 test_results = test_edqtl_directions(gwas_hits)
 
-                for tr in test_results:
-                    if tr + "tiled" not in all_test_agreements:
-                        all_test_agreements[tr + "tiled"] = {"+": 0, "na": 0, "-": 0}
-                    for item in test_results[tr]:
-                        all_test_agreements[tr + "tiled"][item] += test_results[tr][item]
+                with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+                    for tr in test_results:
+                        # Add results to the cumulative total
+                        if "tiled" not in all_test_agreements:
+                           all_test_agreements["tiled"] = {} 
+                        if tr not in all_test_agreements["tiled"]:
+                            all_test_agreements["tiled"][tr] = {"+": 0, "na": 0, "-": 0}
+                        for item in test_results[tr]:
+                            all_test_agreements["tiled"][tr][item] += test_results[tr][item]
+
+                        # Write results to main results file
+                        a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "tiled", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
+
 
     # For ALL traits combined...
-    # See if binomial test passes in either direction (two-tailed)
     print "All tests together:"
-    for mode in all_test_agreements:
-        print mode
-        binom_k = min(all_test_agreements[mode]["+"], all_test_agreements[mode]["-"])
-        # Get prob of seeing a result more extreme than this, in either direction
-        binom_p = 2 * stats.binom.cdf(binom_k, all_test_agreements[mode]["+"] + all_test_agreements[mode]["-"], 0.5)   
-        # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
-            
-        print all_test_agreements[mode], binom_p
 
-def snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, window=1000000):
+    with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+        for mode in all_test_agreements:
+            for test in all_test_agreements[mode]:
+                # See if binomial test passes in either direction (two-tailed)
+                print mode, test
+                binom_k = min(all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"])
+                # Get prob of seeing a result more extreme than this, in either direction
+                binom_p = 2 * stats.binom.cdf(binom_k, all_test_agreements[mode][test]["+"] + all_test_agreements[mode][test]["-"], 0.5)   
+                # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
+                print all_test_agreements[mode][test], binom_p
+   
+                # Write results to a file
+                a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("all_traits", item, mode, all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"], all_test_agreements[mode][test]["na"]))
+   
+def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, window=1000000):
 
     trait = gwas_file
 
@@ -265,7 +287,7 @@ def snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, wind
     return(snps_to_test)
 
 
-def snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
+def gwas_snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
 
     trait = gwas_file
 
@@ -507,7 +529,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
             all_edits[edit_site].append(round(gwas_risk_edqtl_zscore,2))
 
             if output_full_zscores:
-                with open("zscore_table.txt", "a") as a:
+                with open("../../../output/direction_of_effect/zscore_table.txt", "a") as a:
                     a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(hit[0], hit[1], hit[2], hit[3].split("/")[-1], tissue_short_name, edit_site, gwas_risk_edqtl_zscore))
 
             # Track which editing site has the strongest association with this GWAS hit,
@@ -645,7 +667,7 @@ def get_eqtl_set(qtls):
 # [ (chrom, snp, eqtl_file, gwas_trait, feature) , ...]
 def get_coloc_snps():
     coloc_snps = set([])
-    with open("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt") as f:
+    with open("../../../output/colocalization/main_coloc_results/aggregated/aggregated_coloc_results.txt") as f:
         f.readline()
         for line in f:
             data = line.strip().split()
@@ -658,7 +680,7 @@ def get_coloc_snps():
             if float(data[9]) >= min_coloc_threshold:
                 chrom, snp = data[0].split("_")
                 # (chrom, snp, eqtl_file, gwas_trait, feature)
-                coloc_snps.add((chrom, snp, data[1], data[2], data[3]))
+                coloc_snps.add((chrom, snp, data[1], data[2].strip().split("/")[-1].replace(".txt.gz", ""), data[3]))
     return coloc_snps
 
 # List all the traits in a gwas file
@@ -682,7 +704,7 @@ def get_traits_in_file(gwas):
                     all_traits.add(data[trait_index])
                     i += 1
             else:
-                all_traits.add(gwas)
+                all_traits.add(gwas.strip().split("/")[-1].replace(".txt.gz", ""))
 
         all_traits = list(all_traits)
 
