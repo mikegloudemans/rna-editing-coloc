@@ -19,15 +19,15 @@ import pickle
 #############################
 
 # Output z-scores for every site?
-output_full_zscores = True
+output_full_zscores = False
 
 # Should we look only at GWS hits, rather than tile across
 # the entire genome and test effects in every 1MB window?
-skip_tiled_mode = False
+skip_tiled_mode = True
 
 # Should we skip the step of filtering down to only colocalized
 # SNPs?
-skip_coloc_filtering = False
+skip_coloc_filtering = True
 
 # If the lead GWAS SNP wasn't even tested for edQTLs, should
 # we call it an NA? Or should be continue selecting nearby
@@ -49,9 +49,15 @@ tiling_window = 5000000
 #min_coloc_threshold = 0.9
 min_coloc_threshold = 0.5
 
+# How large does the z-score (combined across tissues
+# and edit sites) have to be before we consider the direction
+# trustworthy?
+zscore_cutoff = 3
+
 #############################
 
 # List GWAS to test
+all_gwas = glob.glob("../../../data/new_immune_gwas/munged/*/*.gz")
 all_gwas = glob.glob("../../../data/new_immune_gwas/munged/*/*.gz")
 
 # Vitilogo GWAS has problems because not filtered properly for allele frequency; deal with this one later
@@ -425,6 +431,7 @@ def test_hit_wrapper(params):
     output_full_zscores = params[2]
     try:
         return test_hit(hit, coloc_results, output_full_zscores)
+        sys.stdout.flush()
     except:
         traceback.print_exc(file=sys.stdout)
 
@@ -568,7 +575,12 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
     # Combining the best site (from one individual tissue) across all tissues
     tissue_combined = sum(all_edits[best_edit_site]) / (len(all_edits[best_edit_site])**(0.5))
 
-    if tissue_combined > 0:
+    # Skip the site if the z-score direction is too unclear
+    print tissue_combined
+    if abs(tissue_combined) < zscore_cutoff:
+        my_agreement["combined-tissue"]["na"] += 1
+
+    elif tissue_combined > 0:
         my_agreement["combined-tissue"]["+"] += 1
     elif tissue_combined < 0:
         my_agreement["combined-tissue"]["-"] += 1
@@ -586,7 +598,12 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
         z_vec.append(round(tissue_combined,2))
     tissue_combined_site_combined = sum(z_vec) / (len(z_vec) ** (0.5))
 
-    if tissue_combined_site_combined > 0:
+    print tissue_combined_site_combined
+    # Skip the site if the z-score direction is too unclear
+    if abs(tissue_combined_site_combined) < zscore_cutoff:
+        my_agreement["combined-tissue-and-sites"]["na"] += 1
+
+    elif tissue_combined_site_combined > 0:
         my_agreement["combined-tissue-and-sites"]["+"] += 1
     elif tissue_combined_site_combined < 0:
         my_agreement["combined-tissue-and-sites"]["-"] += 1
