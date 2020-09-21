@@ -2,15 +2,14 @@
 # Obtaining latest immune GWAS
 ##############################
 
-# The other GWAS were downloaded and munged using the default scripts that
+# GWAS were downloaded and munged using the default scripts that
 # are downloadable with the gwas-download toolkit
 
-# The ones downloaded below include a few immune-related GWAS that were not 
-# part of the first version
+# Other GWAS not included here were munged using config files directly in the gwas-download module
+python bin/gwas-download/munge/custom_munge.py scripts/preprocessing/munge_config/munge_immune_menu.config
+python bin/gwas-download/munge/custom_munge.py scripts/preprocessing/munge_config/munge_MS.config
 
-python preprocessing/upgrade_gwas/get_immune_gwas.sh
-python ../bin/gwas-download/munge/custom_munge.py preprocessing/upgrade_gwas/munge_immune_menu.config
-python ../bin/gwas-download/overlap/list_snps_to_test.py preprocessing/upgrade_gwas/immune.overlap.config
+# Get overlaps
 
 ##############################
 # Data prep
@@ -22,15 +21,22 @@ python preprocessing/get_eqtl_ref_alt.py
 # Sort and tabix the edQTL files
 bash preprocessing/tabix_eqtls.sh
 
-# Get list of SNPs to test for colocalization
-python ../bin/gwas-download/overlap/list_snps_to_test.py colocalization/config/gwas-overlap-clusters.config 20
-# TODO: Move the ones that aren't the gene-aggregated to another test; they're neither necessary
-# nor time-efficient to run here
-cat <(cat ../output/test-snps/rna-editing_all-gwas_gtex-aggro_gwas-pval1e-06_eqtl-pval1e-06_gwas-window500000_eqtl-window0_coloc-tests.txt) <(tail -n +2 ../output/test-snps/rna-editing_all-gwas_gtex-single-snp_gwas-pval1e-06_eqtl-pval1e-06_gwas-window500000_eqtl-window0_coloc-tests.txt) > ../output/test-snps/rna-editing_full-list.txt
+##############################
+# Determine GWAS / QTL overlap
+##############################
 
-# Run colocalization tests and assemble them
-python colocalization/run_all_tests.py
-python colocalization/compilation/concatenate_results.py
+# Get list of SNPs to test for colocalization
+python bin/gwas-download/overlap/list_snps_to_test.py scripts/preprocessing/overlap_config/rna-editing.overlap.2020-09-15.config 20
+
+##############################
+# Run colocalization
+##############################
+
+# Run colocalization tests
+python bin/coloc-pipeline/dispatch.py scripts/colocalization/config/rna-coloc.config 20
+
+# TODO: assemble colocalization tests
+
 # Filter down to sites containing 50 or more tested SNPs
 python colocalization/compilation/threshold_by_snp_count.sh
 

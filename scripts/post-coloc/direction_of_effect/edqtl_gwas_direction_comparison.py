@@ -11,6 +11,8 @@ from scipy import stats
 import numpy as np
 from multiprocessing import Pool
 import traceback
+import pprint
+pp = pprint.PrettyPrinter(indent=4)
 
 import pickle
 
@@ -52,21 +54,48 @@ min_coloc_threshold = 0.5
 # How large does the z-score (combined across tissues
 # and edit sites) have to be before we consider the direction
 # trustworthy?
-zscore_cutoff = 3
+
+#zscore_cutoff = 3
+zscore_cutoff = 0
 
 #############################
 
 # List GWAS to test
-all_gwas = glob.glob("../../../data/new_immune_gwas/munged/*/*.gz")
-all_gwas = glob.glob("../../../data/new_immune_gwas/munged/*/*.gz")
-
-# Vitilogo GWAS has problems because not filtered properly for allele frequency; deal with this one later
-all_gwas = [ag for ag in all_gwas if "Viti" not in ag]
+all_gwas = ["data/gwas/oak-gwas/hg38/Coronary-Artery-Disease_Nelson_2017/Coronary-Artery-Disease_Nelson_2017.txt.gz",
+        "data/gwas/oak-gwas/hg38/Inflammatory-Bowel-Disease_Liu_2015/Inflammatory-Bowel-Disease.txt.gz",
+        "data/gwas/oak-gwas/hg38/Inflammatory-Bowel-Disease_Liu_2015/Crohns-Disease.txt.gz",
+        "data/gwas/oak-gwas/hg38/Inflammatory-Bowel-Disease_Liu_2015/Ulcerative-Colitis.txt.gz",
+        "data/gwas/oak-gwas/hg38/Lupus_Bentham_2015/Lupus_Bentham_2015.txt.gz",
+        "data/gwas/oak-gwas/hg38/Blood-Lipids_Willer_2013/High-Density-Lipoprotein-GWAS-and-Metabochip.txt.gz",
+        "data/gwas/oak-gwas/hg38/Blood-Lipids_Willer_2013/Low-Density-Lipoprotein-GWAS-and-Metabochip.txt.gz",
+        "data/gwas/oak-gwas/hg38/Blood-Lipids_Willer_2013/Total-Cholesterol-GWAS-and-Metabochip.txt.gz",
+        "data/gwas/oak-gwas/hg38/Blood-Lipids_Willer_2013/Triglycerides-GWAS-and-Metabochip.txt.gz",
+        "output/MS-data/formatted/hg38/Multiple-Sclerosis.txt.gz",
+        "data/gwas/oak-gwas/hg38/Amyotrophic-Lateral-Sclerosis_Nicolas_2018/Amyotrophic-Lateral-Sclerosis_Nicolas_2018.txt.gz",
+        "data/gwas/oak-gwas/hg38/Psoriasis_Tsoi_2012/Psoriasis_Tsoi_2012.txt.gz",
+        "data/gwas/oak-gwas/hg38/Atopic-Dermatitis_EAGLE_2015/Atopic-Dermatitis_EAGLE_2015.txt.gz",
+        "data/gwas/oak-gwas/hg38/Depression_Howard_2019/Depression-Meta-Analysis.txt.gz",
+        "data/gwas/oak-gwas/hg38/Neuroticism_Luciano_2017/Neuroticism_Luciano_2017.txt.gz",
+        "data/gwas/oak-gwas/hg38/Depressive-Symptoms_Okbay_2016/Depressive-Symptoms_Okbay_2016.txt.gz",
+        "data/gwas/oak-gwas/hg38/Asthma_Demenais_2017/Asthma_Demenais_2017.txt.gz",
+        "data/gwas/oak-gwas/hg38/Celiac-Disease_Trynka_2011/Celiac-Disease_Trynka_2011.txt.gz",
+        "data/gwas/oak-gwas/hg38/Parkinsons_Pankratz_2012/Parkinsons_Pankratz_2012.txt.gz",
+        "data/gwas/oak-gwas/hg38/Primary-Sclerosing-Cholangitis_Ji_2017/Primary-Sclerosing-Cholangitis_Ji_2017.txt.gz",
+        "data/gwas/oak-gwas/hg38/Type-1-Diabetes_Onengut-Gumuscu_2015/Type-1-Diabetes-Meta-Analysis.txt.gz",
+        "data/gwas/oak-gwas/hg38/Type-2-Diabetes_Mahajan_2018/Type-2-Diabetes-Adjusted-For-BMI-European.txt.gz",
+        "data/gwas/oak-gwas/hg38/Alzheimers_Jansen_2018/Alzheimers_Jansen_2018.txt.gz",
+        "data/gwas/oak-gwas/hg38/Schizophrenia_Lam_2019/Schizophrenia-European.txt.gz",
+        "data/gwas/oak-gwas/hg38/Systemic-Sclerosis_Lopez-Isac_2019/Systemic-Sclerosis_Lopez-Isac_2019.txt.gz",
+        "data/gwas/oak-gwas/hg38/Autoimmune-Thyroid-Disease_Cooper_2012/Autoimmune-Thyroid-Disease_Cooper_2012.txt.gz",
+        "data/gwas/oak-gwas/hg38/BMI-and-Height_Yengo_2018/BMI.txt.gz",
+        "data/gwas/oak-gwas/hg38/BMI-and-Height_Yengo_2018/Height.txt.gz",
+        "data/gwas/oak-gwas/hg38/Primary-Biliary-Cirrhosis_Cordell_2015/Primary-Biliary-Cirrhosis_Cordell_2015.txt.gz"
+]
 
 # TODO: Add some negative controls (non-immune traits)
 
 # List directory with eQTLs
-all_eqtls = glob.glob("../../../data/tabix_eqtls/*.txt.gz")
+all_eqtls = glob.glob("data/tabix_eqtls/*.txt.gz")
 
 def main():
 
@@ -77,11 +106,11 @@ def main():
 
     # Write header to z-score file
     if output_full_zscores:
-        with open("../../../output/direction_of_effect/zscore_table.txt", "w") as w:
+        with open("output/direction_of_effect/zscore_table.txt", "w") as w:
             w.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format("gwas_chr", "gwas_pos", "gwas_pval", "gwas_trait", "edit_tissue", "edit_site", "gwas_risk_edqtl_zscore"))
 
     # Write header to main results file
-    with open("../../../output/direction_of_effect/main_results_table.txt", "w") as w:
+    with open("output/direction_of_effect/main_results_table.txt", "w") as w:
         w.write("gwas_trait\ttest_mode\tsnp_set\tnum_positive\tnum_negative\tnum_na\n")
 
     coloc_results = get_coloc_snps()
@@ -122,11 +151,12 @@ def main():
             print trait
             # Get all SNPs with p-value below our chosen threshold
             gwas_hits = gwas_snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
+            pp.pprint(gwas_hits)
             # Test edQTL directions!
             # Also, output all the z-scores for these tests if it's been requested
             test_results = test_edqtl_directions(gwas_hits, output_full_zscores = output_full_zscores)
 
-            with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+            with open("output/direction_of_effect/main_results_table.txt", "a") as a:
                 for tr in test_results:
                     # Add results to the cumulative total
                     if "gwas_hits" not in all_test_agreements:
@@ -150,7 +180,7 @@ def main():
                 coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
                 test_results = test_edqtl_directions(gwas_hits, coloc_sub)
 
-                with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+                with open("output/direction_of_effect/main_results_table.txt", "a") as a:
                     for tr in test_results:
                         # Add results to the cumulative total
                         if "coloc_only" not in all_test_agreements:
@@ -176,7 +206,7 @@ def main():
                 # Test edQTL directions!
                 test_results = test_edqtl_directions(gwas_hits)
 
-                with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+                with open("output/direction_of_effect/main_results_table.txt", "a") as a:
                     for tr in test_results:
                         # Add results to the cumulative total
                         if "tiled" not in all_test_agreements:
@@ -193,7 +223,7 @@ def main():
     # For ALL traits combined...
     print "All tests together:"
 
-    with open("../../../output/direction_of_effect/main_results_table.txt", "a") as a:
+    with open("output/direction_of_effect/main_results_table.txt", "a") as a:
         for mode in all_test_agreements:
             for test in all_test_agreements[mode]:
                 # See if binomial test passes in either direction (two-tailed)
@@ -205,7 +235,7 @@ def main():
                 print all_test_agreements[mode][test], binom_p
    
                 # Write results to a file
-                a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("all_traits", item, mode, all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"], all_test_agreements[mode][test]["na"]))
+                a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("all_traits", test, mode, all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"], all_test_agreements[mode][test]["na"]))
    
 def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, window=1000000):
 
@@ -536,7 +566,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
             all_edits[edit_site].append(round(gwas_risk_edqtl_zscore,2))
 
             if output_full_zscores:
-                with open("../../../output/direction_of_effect/zscore_table.txt", "a") as a:
+                with open("output/direction_of_effect/zscore_table.txt", "a") as a:
                     a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(hit[0], hit[1], hit[2], hit[3].split("/")[-1], tissue_short_name, edit_site, gwas_risk_edqtl_zscore))
 
             # Track which editing site has the strongest association with this GWAS hit,
@@ -576,7 +606,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
     tissue_combined = sum(all_edits[best_edit_site]) / (len(all_edits[best_edit_site])**(0.5))
 
     # Skip the site if the z-score direction is too unclear
-    print tissue_combined
+    #print tissue_combined
     if abs(tissue_combined) < zscore_cutoff:
         my_agreement["combined-tissue"]["na"] += 1
 
@@ -598,7 +628,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
         z_vec.append(round(tissue_combined,2))
     tissue_combined_site_combined = sum(z_vec) / (len(z_vec) ** (0.5))
 
-    print tissue_combined_site_combined
+    #print tissue_combined_site_combined
     # Skip the site if the z-score direction is too unclear
     if abs(tissue_combined_site_combined) < zscore_cutoff:
         my_agreement["combined-tissue-and-sites"]["na"] += 1
@@ -657,7 +687,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
 # It would be nice to make this faster, but probably not possible because
 # you can only read the disk so fast...
 def get_eqtl_set(qtls):
-    pickle_file = "all_edqtl_{0}.pkl".format(max_edqtl_distance)
+    pickle_file = "scripts/post-coloc/direction_of_effect/all_edqtl_{0}.pkl".format(max_edqtl_distance)
     if os.path.exists(pickle_file):
         with open(pickle_file) as f:
             return pickle.load(f)
@@ -684,7 +714,7 @@ def get_eqtl_set(qtls):
 # [ (chrom, snp, eqtl_file, gwas_trait, feature) , ...]
 def get_coloc_snps():
     coloc_snps = set([])
-    with open("../../../output/colocalization/main_coloc_results/aggregated/aggregated_coloc_results.txt") as f:
+    with open("output/colocalization/main_coloc_results/aggregated/aggregated_coloc_results.txt") as f:
         f.readline()
         for line in f:
             data = line.strip().split()
