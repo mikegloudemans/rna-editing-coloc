@@ -55,13 +55,14 @@ min_coloc_threshold = 0.5
 # and edit sites) have to be before we consider the direction
 # trustworthy?
 
-#zscore_cutoff = 3
-zscore_cutoff = 0
+zscore_cutoff = 3
+#zscore_cutoff = 0
 
 #############################
 
 # List GWAS to test
-all_gwas = ["data/gwas/oak-gwas/hg38/Coronary-Artery-Disease_Nelson_2017/Coronary-Artery-Disease_Nelson_2017.txt.gz",
+all_gwas = [ \
+	"data/gwas/oak-gwas/hg38/Coronary-Artery-Disease_Nelson_2017/Coronary-Artery-Disease_Nelson_2017.txt.gz",
         "data/gwas/oak-gwas/hg38/Inflammatory-Bowel-Disease_Liu_2015/Inflammatory-Bowel-Disease.txt.gz",
         "data/gwas/oak-gwas/hg38/Inflammatory-Bowel-Disease_Liu_2015/Crohns-Disease.txt.gz",
         "data/gwas/oak-gwas/hg38/Inflammatory-Bowel-Disease_Liu_2015/Ulcerative-Colitis.txt.gz",
@@ -77,7 +78,7 @@ all_gwas = ["data/gwas/oak-gwas/hg38/Coronary-Artery-Disease_Nelson_2017/Coronar
         "data/gwas/oak-gwas/hg38/Depression_Howard_2019/Depression-Meta-Analysis.txt.gz",
         "data/gwas/oak-gwas/hg38/Neuroticism_Luciano_2017/Neuroticism_Luciano_2017.txt.gz",
         "data/gwas/oak-gwas/hg38/Depressive-Symptoms_Okbay_2016/Depressive-Symptoms_Okbay_2016.txt.gz",
-        "data/gwas/oak-gwas/hg38/Asthma_Demenais_2017/Asthma_Demenais_2017.txt.gz",
+        "data/gwas/oak-gwas/hg38/Asthma_Demenais_2017/Asthma-European-Fixed-Effect.txt.gz",
         "data/gwas/oak-gwas/hg38/Celiac-Disease_Trynka_2011/Celiac-Disease_Trynka_2011.txt.gz",
         "data/gwas/oak-gwas/hg38/Parkinsons_Pankratz_2012/Parkinsons_Pankratz_2012.txt.gz",
         "data/gwas/oak-gwas/hg38/Primary-Sclerosing-Cholangitis_Ji_2017/Primary-Sclerosing-Cholangitis_Ji_2017.txt.gz",
@@ -95,7 +96,7 @@ all_gwas = ["data/gwas/oak-gwas/hg38/Coronary-Artery-Disease_Nelson_2017/Coronar
 # TODO: Add some negative controls (non-immune traits)
 
 # List directory with eQTLs
-all_eqtls = glob.glob("data/tabix_eqtls/*.txt.gz")
+all_eqtls = glob.glob("data/edqtls_single_site/*.txt.gz")
 
 def main():
 
@@ -113,7 +114,8 @@ def main():
     with open("output/direction_of_effect/main_results_table.txt", "w") as w:
         w.write("gwas_trait\ttest_mode\tsnp_set\tnum_positive\tnum_negative\tnum_na\n")
 
-    coloc_results = get_coloc_snps()
+    if not skip_coloc_filtering:
+        coloc_results = get_coloc_snps()
     # ^ list of snps in tuple form (chrom, snp, eqtl_file, gwas_trait, feature)
     # It's already filtered down to the list of SNPs that actually colocalized
 
@@ -135,8 +137,8 @@ def main():
 
         # Get list traits for GWAS file
         all_traits = get_traits_in_file(gwas)
-
-        if all_traits is None:
+        
+	if all_traits is None:
             continue
         
         # For all traits measured in this single GWAS file...
@@ -151,7 +153,7 @@ def main():
             print trait
             # Get all SNPs with p-value below our chosen threshold
             gwas_hits = gwas_snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
-            pp.pprint(gwas_hits)
+            #pp.pprint(gwas_hits)
             # Test edQTL directions!
             # Also, output all the z-scores for these tests if it's been requested
             test_results = test_edqtl_directions(gwas_hits, output_full_zscores = output_full_zscores)
@@ -244,13 +246,16 @@ def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait,
     with gzip.open(gwas_file) as f:
         header = f.readline().strip().split()
 
+        if "direction" not in header:
+            return []
+
         trait_index = -1
         if "trait" in header:
             trait_index = header.index("trait")
         pval_index = header.index("pvalue")
         chr_index = header.index("chr")
         snp_pos_index = header.index("snp_pos")
-        direction_index = header.index("effect_direction")
+        direction_index = header.index("direction")
         alt_index = header.index("effect_allele")
         ref_index = header.index("non_effect_allele")
 
@@ -283,6 +288,8 @@ def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait,
             if pvalue > gwas_threshold:
                 continue
 
+            if len(data) <= direction_index:
+                continue
             direction = data[direction_index]
             ref = data[ref_index]
             alt = data[alt_index]
@@ -336,7 +343,7 @@ def gwas_snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
         pval_index = header.index("pvalue")
         chr_index = header.index("chr")
         snp_pos_index = header.index("snp_pos")
-        direction_index = header.index("effect_direction")
+        direction_index = header.index("direction")
         alt_index = header.index("effect_allele")
         ref_index = header.index("non_effect_allele")
         
@@ -575,7 +582,7 @@ def test_hit(hit, coloc_results=None, output_full_zscores=False):
                 best_edqtl_pval = edqtl_pval
                 best_edit_site = edit_site
                 best_edqtl_direction = gwas_risk_edqtl_zscore
-
+    
     if best_edqtl_pval == 1:
         # No edQTLs were tested for this site, so we can't say anything about it
         # for any of the possible concordance testing methods
@@ -736,7 +743,7 @@ def get_traits_in_file(gwas):
         all_traits = set([])
         with gzip.open(gwas) as f:
             head = f.readline().strip().split("\t")
-            if "effect_direction" not in head or "effect_allele" not in head or "non_effect_allele" not in head:
+            if "direction" not in head or "effect_allele" not in head or "non_effect_allele" not in head:
                 # Signal to skip this trait if the effect direction isn't even obtainable
                 return None
             if "trait" in head:
