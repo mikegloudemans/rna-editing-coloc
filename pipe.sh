@@ -6,10 +6,8 @@
 # are downloadable with the gwas-download toolkit
 
 # Other GWAS not included here were munged using config files directly in the gwas-download module
-python bin/gwas-download/munge/custom_munge.py scripts/preprocessing/munge_config/munge_immune_menu.config
+python bin/gwas-download/munge/custom_munge.py scripts/preprocessing/munge_config/munge_all_rna_editing.config
 python bin/gwas-download/munge/custom_munge.py scripts/preprocessing/munge_config/munge_MS.config
-
-# Get overlaps
 
 ##############################
 # Data prep
@@ -26,6 +24,7 @@ bash preprocessing/tabix_eqtls.sh
 ##############################
 
 # Get list of SNPs to test for colocalization
+# NOTE: First, make sure python2 and tabix are loaded
 python bin/gwas-download/overlap/list_snps_to_test.py scripts/preprocessing/overlap_config/rna-editing.overlap.2020-09-15.config 20
 
 ##############################
@@ -35,7 +34,7 @@ python bin/gwas-download/overlap/list_snps_to_test.py scripts/preprocessing/over
 # Run colocalization tests
 python bin/coloc-pipeline/dispatch.py scripts/colocalization/config/rna-coloc.config 20
 
-# TODO: assemble colocalization tests
+# TODO: concatenate all colocalization tests
 
 # Filter down to sites containing 50 or more tested SNPs
 python colocalization/compilation/threshold_by_snp_count.sh

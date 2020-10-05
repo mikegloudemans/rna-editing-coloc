@@ -55,7 +55,7 @@ min_coloc_threshold = 0.5
 # and edit sites) have to be before we consider the direction
 # trustworthy?
 
-zscore_cutoff = 3
+zscore_cutoffs = [0, 1, 2, 3]
 #zscore_cutoff = 0
 
 #############################
@@ -72,7 +72,8 @@ all_gwas = [ \
         "data/gwas/oak-gwas/hg38/Blood-Lipids_Willer_2013/Total-Cholesterol-GWAS-and-Metabochip.txt.gz",
         "data/gwas/oak-gwas/hg38/Blood-Lipids_Willer_2013/Triglycerides-GWAS-and-Metabochip.txt.gz",
         "output/MS-data/formatted/hg38/Multiple-Sclerosis.txt.gz",
-        "data/gwas/oak-gwas/hg38/Amyotrophic-Lateral-Sclerosis_Nicolas_2018/Amyotrophic-Lateral-Sclerosis_Nicolas_2018.txt.gz",
+	"data/gwas/oak-gwas/hg38/Rheumatoid-Arthritis_Okada_2014/Rheumatoid-Arthritis-European.txt.gz",
+	"data/gwas/oak-gwas/hg38/Amyotrophic-Lateral-Sclerosis_van-Rheenen_2016/Amyotrophic-Lateral-Sclerosis-Meta-Analysis.txt.gz",
         "data/gwas/oak-gwas/hg38/Psoriasis_Tsoi_2012/Psoriasis_Tsoi_2012.txt.gz",
         "data/gwas/oak-gwas/hg38/Atopic-Dermatitis_EAGLE_2015/Atopic-Dermatitis_EAGLE_2015.txt.gz",
         "data/gwas/oak-gwas/hg38/Depression_Howard_2019/Depression-Meta-Analysis.txt.gz",
@@ -87,11 +88,15 @@ all_gwas = [ \
         "data/gwas/oak-gwas/hg38/Alzheimers_Jansen_2018/Alzheimers_Jansen_2018.txt.gz",
         "data/gwas/oak-gwas/hg38/Schizophrenia_Lam_2019/Schizophrenia-European.txt.gz",
         "data/gwas/oak-gwas/hg38/Systemic-Sclerosis_Lopez-Isac_2019/Systemic-Sclerosis_Lopez-Isac_2019.txt.gz",
-        "data/gwas/oak-gwas/hg38/Autoimmune-Thyroid-Disease_Cooper_2012/Autoimmune-Thyroid-Disease_Cooper_2012.txt.gz",
         "data/gwas/oak-gwas/hg38/BMI-and-Height_Yengo_2018/BMI.txt.gz",
         "data/gwas/oak-gwas/hg38/BMI-and-Height_Yengo_2018/Height.txt.gz",
         "data/gwas/oak-gwas/hg38/Primary-Biliary-Cirrhosis_Cordell_2015/Primary-Biliary-Cirrhosis_Cordell_2015.txt.gz"
 ]
+
+# These ones, we tried but they won't work:
+
+# No listed direction of effect:      
+# "data/gwas/oak-gwas/hg38/Autoimmune-Thyroid-Disease_Cooper_2012/Autoimmune-Thyroid-Disease_Cooper_2012.txt.gz",
 
 # TODO: Add some negative controls (non-immune traits)
 
@@ -112,133 +117,137 @@ def main():
 
     # Write header to main results file
     with open("output/direction_of_effect/main_results_table.txt", "w") as w:
-        w.write("gwas_trait\ttest_mode\tsnp_set\tnum_positive\tnum_negative\tnum_na\n")
+        w.write("gwas_trait\ttest_mode\tsnp_set\tnum_positive\tnum_negative\tnum_na\tzscore_cutoff\n")
 
     if not skip_coloc_filtering:
         coloc_results = get_coloc_snps()
     # ^ list of snps in tuple form (chrom, snp, eqtl_file, gwas_trait, feature)
     # It's already filtered down to the list of SNPs that actually colocalized
 
-    # Dictionary to record concordance agreement status for several different types of concordance tests
-    # across ALL GWAS (not just a single study for this one)
-    all_test_agreements = {}
-    # For each GWAS file...
-    for gwas in all_gwas:
-        print
-        print gwas
-        # Select GWAS SNPs to compare
-        # 
-        # Two options for this: could go through the genome in a tiled fashion, breaking into 1MB chunks,
-        # pulling best from each. OR could get top SNPs for the trait up to some certain level,
-        # and see what this gives us
-        #
-        # Let's try the second option to start, since we have code to do it already
-        #
+    for zscore_cutoff in zscore_cutoffs:
 
-        # Get list traits for GWAS file
-        all_traits = get_traits_in_file(gwas)
-        
-	if all_traits is None:
-            continue
-        
-        # For all traits measured in this single GWAS file...
-        for trait in all_traits:
+	    # Dictionary to record concordance agreement status for several different types of concordance tests
+	    # across ALL GWAS (not just a single study for this one)
+	    all_test_agreements = {}
+	    # For each GWAS file...
 
-            ################################################
-            # Test concordance, GWAS lead SNPs only,
-            # no coloc filtering
-            ################################################
-            print 
-            print gwas
-            print trait
-            # Get all SNPs with p-value below our chosen threshold
-            gwas_hits = gwas_snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
-            #pp.pprint(gwas_hits)
-            # Test edQTL directions!
-            # Also, output all the z-scores for these tests if it's been requested
-            test_results = test_edqtl_directions(gwas_hits, output_full_zscores = output_full_zscores)
+	    for gwas in all_gwas:
+		print
+		print gwas
+		# Select GWAS SNPs to compare
+		# 
+		# Two options for this: could go through the genome in a tiled fashion, breaking into 1MB chunks,
+		# pulling best from each. OR could get top SNPs for the trait up to some certain level,
+		# and see what this gives us
+		#
+		# Let's try the second option to start, since we have code to do it already
+		#
 
-            with open("output/direction_of_effect/main_results_table.txt", "a") as a:
-                for tr in test_results:
-                    # Add results to the cumulative total
-                    if "gwas_hits" not in all_test_agreements:
-                        all_test_agreements["gwas_hits"] = {}
-                    if tr not in all_test_agreements["gwas_hits"]:
-                        all_test_agreements["gwas_hits"][tr] = {"+": 0, "na": 0, "-": 0}
-                    for item in test_results[tr]:
-                        all_test_agreements["gwas_hits"][tr][item] += test_results[tr][item]
+		# Get list traits for GWAS file
+		all_traits = get_traits_in_file(gwas)
+		
+		if all_traits is None:
+		    continue
+		
+		# For all traits measured in this single GWAS file...
+		for trait in all_traits:
 
-                    # Write results to main results file
-                    a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "gwas_hits", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
+		    ################################################
+		    # Test concordance, GWAS lead SNPs only,
+		    # no coloc filtering
+		    ################################################
+		    print 
+		    print gwas
+		    print trait
+		    
+		    gwas_hits = gwas_snps_by_threshold(valid_qtls, gwas, gwas_pval_threshold, trait)
 
-            if not skip_coloc_filtering:
+		    #pp.pprint(gwas_hits)
+		    # Test edQTL directions!
+		    # Also, output all the z-scores for these tests if it's been requested
+		    test_results = test_edqtl_directions(gwas_hits, zscore_cutoff, output_full_zscores = output_full_zscores)
 
-                ########################################################
-                # Test concordance, GWAS lead SNPs only,
-                # subsetting to SNPs colocalized for current GWAS trait
-                ########################################################
+		    with open("output/direction_of_effect/main_results_table.txt", "a") as a:
+			for tr in test_results:
+			    # Add results to the cumulative total
+			    if "gwas_hits" not in all_test_agreements:
+				all_test_agreements["gwas_hits"] = {}
+			    if tr not in all_test_agreements["gwas_hits"]:
+				all_test_agreements["gwas_hits"][tr] = {"+": 0, "na": 0, "-": 0}
+			    for item in test_results[tr]:
+				all_test_agreements["gwas_hits"][tr][item] += test_results[tr][item]
 
-                print "Coloc results only:"
-                coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
-                test_results = test_edqtl_directions(gwas_hits, coloc_sub)
+			    # Write results to main results file
+			    a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(trait, tr, "gwas_hits", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"], zscore_cutoff))
 
-                with open("output/direction_of_effect/main_results_table.txt", "a") as a:
-                    for tr in test_results:
-                        # Add results to the cumulative total
-                        if "coloc_only" not in all_test_agreements:
-                            all_test_agreements["coloc_only"] = {}
-                        if tr not in all_test_agreements["coloc_only"]:
-                            all_test_agreements["coloc_only"][tr] = {"+": 0, "na": 0, "-": 0}
-                        for item in test_results[tr]:
-                            all_test_agreements["coloc_only"][tr][item] += test_results[tr][item]
+		    if not skip_coloc_filtering:
 
-                        # Write results to main results file
-                        a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "coloc_only", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
+			########################################################
+			# Test concordance, GWAS lead SNPs only,
+			# subsetting to SNPs colocalized for current GWAS trait
+			########################################################
 
-            # We can opt to skip the next part to save time
-            if not skip_tiled_mode:
-            
-                ################################################
-                # Test concordance, one SNP from every chunk,
-                # no coloc filtering
-                ################################################
-                print "Tiled mode:",
+			print "Coloc results only:"
+			coloc_sub = set([(cr[0], cr[1]) for cr in list(coloc_results) if cr[3] == trait])
+			test_results = test_edqtl_directions(gwas_hits, zscore_cutoff, coloc_sub)
 
-                gwas_hits = gwas_snps_by_tiling(valid_qtls, gwas, trait, tiling_window)
-                # Test edQTL directions!
-                test_results = test_edqtl_directions(gwas_hits)
+			with open("output/direction_of_effect/main_results_table.txt", "a") as a:
+			    for tr in test_results:
+				# Add results to the cumulative total
+				if "coloc_only" not in all_test_agreements:
+				    all_test_agreements["coloc_only"] = {}
+				if tr not in all_test_agreements["coloc_only"]:
+				    all_test_agreements["coloc_only"][tr] = {"+": 0, "na": 0, "-": 0}
+				for item in test_results[tr]:
+				    all_test_agreements["coloc_only"][tr][item] += test_results[tr][item]
 
-                with open("output/direction_of_effect/main_results_table.txt", "a") as a:
-                    for tr in test_results:
-                        # Add results to the cumulative total
-                        if "tiled" not in all_test_agreements:
-                           all_test_agreements["tiled"] = {} 
-                        if tr not in all_test_agreements["tiled"]:
-                            all_test_agreements["tiled"][tr] = {"+": 0, "na": 0, "-": 0}
-                        for item in test_results[tr]:
-                            all_test_agreements["tiled"][tr][item] += test_results[tr][item]
+				# Write results to main results file
+				a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "coloc_only", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
 
-                        # Write results to main results file
-                        a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "tiled", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
+		    # We can opt to skip the next part to save time
+		    if not skip_tiled_mode:
+		    
+			################################################
+			# Test concordance, one SNP from every chunk,
+			# no coloc filtering
+			################################################
+			print "Tiled mode:",
+
+			gwas_hits = gwas_snps_by_tiling(valid_qtls, gwas, trait, tiling_window)
+			# Test edQTL directions!
+			test_results = test_edqtl_directions(gwas_hits, zscore_cutoff)
+
+			with open("output/direction_of_effect/main_results_table.txt", "a") as a:
+			    for tr in test_results:
+				# Add results to the cumulative total
+				if "tiled" not in all_test_agreements:
+				   all_test_agreements["tiled"] = {} 
+				if tr not in all_test_agreements["tiled"]:
+				    all_test_agreements["tiled"][tr] = {"+": 0, "na": 0, "-": 0}
+				for item in test_results[tr]:
+				    all_test_agreements["tiled"][tr][item] += test_results[tr][item]
+
+				# Write results to main results file
+				a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(trait, tr, "tiled", test_results[tr]["+"], test_results[tr]["-"], test_results[tr]["na"]))
 
 
-    # For ALL traits combined...
-    print "All tests together:"
+	    # For ALL traits combined...
+	    print "All tests together:"
 
-    with open("output/direction_of_effect/main_results_table.txt", "a") as a:
-        for mode in all_test_agreements:
-            for test in all_test_agreements[mode]:
-                # See if binomial test passes in either direction (two-tailed)
-                print mode, test
-                binom_k = min(all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"])
-                # Get prob of seeing a result more extreme than this, in either direction
-                binom_p = 2 * stats.binom.cdf(binom_k, all_test_agreements[mode][test]["+"] + all_test_agreements[mode][test]["-"], 0.5)   
-                # Fails in case where they're exactly even, but that's OK because that's insignificant anyway
-                print all_test_agreements[mode][test], binom_p
-   
-                # Write results to a file
-                a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("all_traits", test, mode, all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"], all_test_agreements[mode][test]["na"]))
-   
+	    with open("output/direction_of_effect/main_results_table.txt", "a") as a:
+		for mode in all_test_agreements:
+		    for test in all_test_agreements[mode]:
+			# See if binomial test passes in either direction (two-tailed)
+			print mode, test
+			binom_k = min(all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"])
+			# Get prob of seeing a result more extreme than this, in either direction
+			binom_p = 2 * stats.binom.cdf(binom_k, all_test_agreements[mode][test]["+"] + all_test_agreements[mode][test]["-"], 0.5)   
+			# Fails in case where they're exactly even, but that's OK because that's insignificant anyway
+			print all_test_agreements[mode][test], binom_p
+	   
+			# Write results to a file
+			a.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format("all_traits", test, mode, all_test_agreements[mode][test]["+"], all_test_agreements[mode][test]["-"], all_test_agreements[mode][test]["na"], zscore_cutoff))
+	   
 def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait, window=1000000):
 
     trait = gwas_file
@@ -271,10 +280,10 @@ def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait,
                 pvalue = float(data[pval_index])
             except:
                 continue
-
+            
             chr = data[chr_index]
             pos = data[snp_pos_index]
-           
+	    
             # If this speed-up parameter isn't set, then we should keep
             # successively picking additional GWAS SNPs until we run out
             # or until we find one that was actually tested for eQTLs in
@@ -295,7 +304,7 @@ def gwas_snps_by_threshold(valid_qtls, gwas_file, gwas_threshold, default_trait,
             alt = data[alt_index]
 
             all_snps.append((chr, pos, pvalue, trait, direction, ref, alt))
-    
+ 
     # For now, include only autosomal SNPs.
     filtered = []
     for s in all_snps:
@@ -401,7 +410,7 @@ def gwas_snps_by_tiling(valid_qtls, gwas_file, default_trait, window=1000000):
 
     return(snps_to_test)
 
-def test_edqtl_directions(gwas_hits, coloc_results = None, output_full_zscores=False):
+def test_edqtl_directions(gwas_hits, zscore_cutoff, coloc_results = None, output_full_zscores=False):
 
     # Names for all the ways we want to test the directional agreement
     modes = ["binomial", \
@@ -425,7 +434,7 @@ def test_edqtl_directions(gwas_hits, coloc_results = None, output_full_zscores=F
 
     # Test SNPs for agreement in parallel, to save time
     pool = Pool(max_cores)
-    results = pool.map(test_hit_wrapper, [(gh, coloc_results, output_full_zscores) for gh in gwas_hits])
+    results = pool.map(test_hit_wrapper, [(gh, zscore_cutoff, coloc_results, output_full_zscores) for gh in gwas_hits])
 
     # Total up the test results for all different tested SNPs
     # and also keep a record of all the combined z-scores for the
@@ -464,17 +473,18 @@ def test_edqtl_directions(gwas_hits, coloc_results = None, output_full_zscores=F
 # traceback message if our spawned threads fail.
 def test_hit_wrapper(params):
     hit = params[0]
-    coloc_results = params[1]
-    output_full_zscores = params[2]
+    zscore_cutoff = params[1]
+    coloc_results = params[2]
+    output_full_zscores = params[3]
     try:
-        return test_hit(hit, coloc_results, output_full_zscores)
+        return test_hit(hit, zscore_cutoff, coloc_results, output_full_zscores)
         sys.stdout.flush()
     except:
         traceback.print_exc(file=sys.stdout)
 
 # If coloc_results is None, include the hit no matter what 
 # Otherwise, skip the hit if it is not colocalized
-def test_hit(hit, coloc_results=None, output_full_zscores=False):
+def test_hit(hit, zscore_cutoff, coloc_results=None, output_full_zscores=False):
 
     # Z-scores for all editing sites in all tissues tested for association with the GWAS hit
     all_edits = {}
