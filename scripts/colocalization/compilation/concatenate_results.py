@@ -3,51 +3,34 @@ import subprocess
 
 # Collect results from all analysis (they're all just done with COLOC at this point for comparability)
 
+header_file = "output/colocalization/rna-editing-revisions/2020-10-04_14-09-43.014967_rna-coloc/rna-gwas-overlap_all-gwas_gtex_source-pval-min-0_source-pval-max-5e-08_lookup-pval1e-05_source-window500000_lookup-window10000_coloc-tests_phase8_coloc_status.txt"
+coloc_output_files = glob.glob("output/colocalization/rna-editing-revisions/*/*coloc_status.txt")
+coloc_concat_file = "output/colocalization/rna-editing-revisions/concatenated/all_coloc_results.txt"
+
+# No line should be written twice
+lines = set([])
+
 # Raw input files
 coloc_raw_output_directory = "../../../output/colocalization/main_coloc_results/raw_coloc_output"
 # Where to place processed output files
 coloc_processed_output_directory = "../../../output/colocalization/main_coloc_results/aggregated"
 
-results = subprocess.check_output("ls {0}".format(coloc_raw_output_directory), shell=True).strip().split()
+with open(coloc_concat_file, "w") as w:
+	with open(header_file) as f:
+		header = f.readline()
+		w.write(header)
+		lines.add(header)
 
-clpp_file = glob.glob("{1}/{0}/*coloc*".format(results[0], coloc_raw_output_directory))[0]
-with open("{0}/aggregated_coloc_results.txt".format(coloc_processed_output_directory), "w") as w:
-    with open(clpp_file) as f:
-        w.write(f.readline())
+	for coloc_file in coloc_output_files:
+		with open(coloc_file) as f:
+			for line in f:
+				# Write the line only if it hasn't been written before
+				if line not in lines:
+					lines.add(line)
+					w.write(line)
 
-with open("{0}/aggregated_coloc_results.txt".format(coloc_processed_output_directory), "a") as a:
-    for res in results:
-        for clpp_file in glob.glob("{1}/{0}/*coloc*".format(res, coloc_raw_output_directory)):
-            with open(clpp_file) as f:
-                f.readline()
-                for line in f:
-                    a.write(line)
-
+# If needing to copy plots too, then fix this up
+'''
 for file in glob.glob("{0}/*/plots/*".format(coloc_raw_output_directory)):
     subprocess.call("cp -r {0} {1}/plots/".format(file, coloc_processed_output_directory), shell=True)
-
-# The following section is only needed if the colocalization took multiple runs to complete
 '''
-other_results = subprocess.check_output("ls /users/mgloud/projects/brain_gwas/output/completed/rna_editing/moved-2019-11-13/rna-editing-tests-all-coloc", shell=True).strip().split()
-with open("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt", "a") as a:
-    for res in other_results:
-        for clpp_file in glob.glob("/users/mgloud/projects/brain_gwas/output/completed/rna_editing/moved-2019-11-13/rna-editing-tests-all-coloc/{0}/*coloc*".format(res)):
-            with open(clpp_file) as f:
-                f.readline()
-                for line in f:
-                    a.write(line)
-
-other_results = subprocess.check_output("ls /users/mgloud/projects/brain_gwas/output/rna-editing-tests-immune-bonus", shell=True).strip().split()
-with open("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt", "a") as a:
-    for res in other_results:
-        for clpp_file in glob.glob("/users/mgloud/projects/brain_gwas/output/rna-editing-tests-immune-bonus/{0}/*coloc*".format(res)):
-            with open(clpp_file) as f:
-                f.readline()
-                for line in f:
-                    a.write(line)
-'''
-
-
-
-
-

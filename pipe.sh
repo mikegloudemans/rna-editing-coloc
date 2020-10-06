@@ -34,10 +34,11 @@ python bin/gwas-download/overlap/list_snps_to_test.py scripts/preprocessing/over
 # Run colocalization tests
 python bin/coloc-pipeline/dispatch.py scripts/colocalization/config/rna-coloc.config 20
 
-# TODO: concatenate all colocalization tests
+# Concatenate all colocalization tests
+python scripts/colocalization/compilation/concatenate_results.py
 
 # Filter down to sites containing 50 or more tested SNPs
-python colocalization/compilation/threshold_by_snp_count.sh
+python scripts/colocalization/compilation/threshold_by_snp_count.sh
 
 ##############################
 # General post-analysis
