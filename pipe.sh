@@ -48,7 +48,11 @@ python scripts/colocalization/compilation/threshold_by_snp_count.sh
 Rscript scripts/post-coloc/quantify_gwas_explained/compare_qtl_types.R
 
 # Figure 3B
-Rscript post-coloc/interesting_ibd_loci/stack_ibd_loci.R
+# first "prioritize" then "stack"
+Rscript scripts/post-coloc/interesting_ibd_loci/prioritize_ibd_loci.R
+Rscript scripts/post-coloc/interesting_ibd_loci/stack_ibd_loci.R
+
+# TODO: update stuff from here...
 
 # Locus-Compare plots for loci in figures 3C and 4B
 bash colocalization/custom_coloc_tests/get_ibd_splice_variants.sh > ../output/colocalization/custom_coloc_tests/ibd_splice_variants.txt

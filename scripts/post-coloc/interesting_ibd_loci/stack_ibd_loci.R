@@ -4,8 +4,8 @@ require(ggplot2)
 coloc_threshold = 0.5
 
 # Load all loci, coloc status
-loci = read.csv("/users/mgloud/projects/rna_editing/data/HuangIBDAnnotationSummary.csv", header=TRUE)
-coloc_summary = read.table("/users/mgloud/projects/rna_editing/output/ibd_analysis/ibd_coloc_summary.tsv", header=TRUE, fill=TRUE, sep="\t")
+loci = read.csv("data/ibd-huang-annotations/HuangIBDAnnotationSummary.csv", header=TRUE)
+coloc_summary = read.table("output/ibd-huang-annotations/ibd_coloc_summary.tsv", header=TRUE, fill=TRUE, sep="\t")
 colocs = coloc_summary$HD[coloc_summary$best_edqtl_coloc > coloc_threshold]
 coloc_genes = coloc_summary$best_edqtl_feature[coloc_summary$best_edqtl_coloc > coloc_threshold]
 
@@ -31,8 +31,8 @@ loci$edqtl_genes[loci$has_coloc] = sapply(loci[loci$has_coloc,]$HD, function(x)
 			      return(as.character(coloc_summary$best_edqtl_feature[which(coloc_summary$HD==x)]))
 		      })
 
-coloc_results = read.table("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt", header=TRUE, stringsAsFactors=FALSE)
-coloc_results = coloc_results[coloc_results$base_gwas_file == "Inflammatory-Bowel-Disease_Liu_2015_txt_gz",]
+coloc_results = read.table("output/colocalization/rna-editing-revisions/concatenated/all_coloc_results.txt", header=TRUE, stringsAsFactors=FALSE)
+coloc_results = coloc_results[coloc_results$base_gwas_file == "Inflammatory-Bowel-Disease_txt_gz",]
 
 relevant_tissues = c("Adipose-Subcutaneous",
 		     "Pancreas",
