@@ -45,7 +45,7 @@ python scripts/colocalization/compilation/threshold_by_snp_count.sh
 ##############################
 
 # Figure 3A
-Rscript post-coloc/check_qtl_overlaps/compare_qtl_types.R
+Rscript scripts/post-coloc/quantify_gwas_explained/compare_qtl_types.R
 
 # Figure 3B
 Rscript post-coloc/interesting_ibd_loci/stack_ibd_loci.R

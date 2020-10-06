@@ -2,37 +2,18 @@ require(gtools)
 require(tidyverse)
 require(ggplot2)
 
-# TODO: Figure out a way to deal with the "multiple traits in a GWAS" issue
-# Maybe just take the best trait from each base file?
-
 # duplicate traits that should not be classified as immune nor non-immune because they're
 # already present as immune
-blacklist = c("Coronary-Artery-Disease_Schunkert_2011_txt_gz",
-	      "Coronary-Artery-Disease_Nelson_2017_txt_gz",
-	      "Coronary-Artery-Disease_CARDIoGRAMplusC4D_2013_txt_gz",
-	      "Coronary-Artery-Disease_C4D_2011_txt_gz",
-	      "Crohns_Lee_2017_txt_gz",
-	      "Ulcerative-Colitis_Anderson_2011_txt_gz",
-	      "Rheumatoid-Arthritis_Stahl_2010_txt_gz",
-	      "Crohns-Disease_Franke_2010_txt_gz",
-	      "Multiple-Sclerosis_Hafler_2007_txt_gz",
-	      "Atopic-Dermatitis_Hirota_2012_txt_gz",
-	      "GWAS1_txt_gz",
-	      "GWAS2_txt_gz")
+blacklist = c("Depressive-Symptoms_Okbay_2016_txt_gz")
 
 # Load colocalization matrix
-data = read_delim("/users/mgloud/projects/rna_editing/output/aggregated_coloc_results_all.txt", delim="\t")
+data = read_delim("output/colocalization/rna-editing-revisions/concatenated/all_coloc_results.txt", delim="\t")
 data = data[!(data$base_gwas_file %in% blacklist),]
 
-data$base_gwas_file[data$gwas_trait == "Inflammatory-Bowel-Disease"] = "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Inflammatory-Bowel-Disease"
-data$base_gwas_file[data$gwas_trait == "Crohns-Disease"] = "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Crohns-Disease"
-data$base_gwas_file[data$gwas_trait == "Ulcerative-Colitis"] = "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Ulcerative-Colitis"
 all_traits_with_coloc_test = unique(data$base_gwas_file)
 
 # Subset to individual QTL types
 gene_level_edqtls = data %>% filter(grepl("combined_sorted", eqtl_file))
-cluster_level_edqtls = data %>% filter(grepl("clust", eqtl_file))
-site_level_edqtls = data %>% filter(grepl("edQTLs", eqtl_file))
 eqtls = data %>% filter(grepl("eQTLs", eqtl_file))
 sqtls = data %>% filter(grepl("sQTLs", eqtl_file))
 
@@ -41,9 +22,6 @@ sqtls = data %>% filter(grepl("sQTLs", eqtl_file))
 dim(sqtls)
 dim(eqtls)
 dim(gene_level_edqtls)
-dim(cluster_level_edqtls)
-dim(site_level_edqtls)
-
 
 # The same colocalization might be tagged multiple times but just with a slightly different ref_snp.
 # This could happen if there are multiple subtraits from the same study that all have slightly different lead SNPs, making the
@@ -54,14 +32,6 @@ gene_level_edqtls$chr = as.numeric(sapply(gene_level_edqtls$ref_snp, function(x)
 gene_level_edqtls$snp_pos = as.numeric(sapply(gene_level_edqtls$ref_snp, function(x){strsplit(x, "_")[[1]][2]}))
 gene_level_edqtls$locus = floor(gene_level_edqtls$snp_pos / 1000000)
 
-cluster_level_edqtls$chr = as.numeric(sapply(cluster_level_edqtls$ref_snp, function(x){strsplit(x, "_")[[1]][1]}))
-cluster_level_edqtls$snp_pos = as.numeric(sapply(cluster_level_edqtls$ref_snp, function(x){strsplit(x, "_")[[1]][2]}))
-cluster_level_edqtls$locus = floor(cluster_level_edqtls$snp_pos / 1000000)
-
-site_level_edqtls$chr = as.numeric(sapply(site_level_edqtls$ref_snp, function(x){strsplit(x, "_")[[1]][1]}))
-site_level_edqtls$snp_pos = as.numeric(sapply(site_level_edqtls$ref_snp, function(x){strsplit(x, "_")[[1]][2]}))
-site_level_edqtls$locus = floor(site_level_edqtls$snp_pos / 1000000)
-
 eqtls$chr = as.numeric(sapply(eqtls$ref_snp, function(x){strsplit(x, "_")[[1]][1]}))
 eqtls$snp_pos = as.numeric(sapply(eqtls$ref_snp, function(x){strsplit(x, "_")[[1]][2]}))
 eqtls$locus = floor(eqtls$snp_pos / 1000000)
@@ -71,22 +41,18 @@ sqtls$snp_pos = as.numeric(sapply(sqtls$ref_snp, function(x){strsplit(x, "_")[[1
 sqtls$locus = floor(sqtls$snp_pos / 1000000)
 
 # Load GWAS SNPs so we know the total number of SNPs at each site
-gwas1 = read_delim("/users/mgloud/projects/rna_editing/output/complex/test-snps/rna-editing_all-gwas_gwas-pval1e-06_gwas-window500000_snps-considered.txt", delim="\t")
-gwas2 = read_delim("/users/mgloud/projects/rna_editing/output/complex/test-snps/new-immune_all-gwas_gwas-pval1e-06_gwas-window500000_snps-considered.txt", delim="\t")
-gwas = rbind(gwas1, gwas2)
+gwas = read_delim("output/snp-lists/rna-gwas-overlap_all-gwas_source-pval-min-0_source-pval-max-5e-08_source-window500000_snps-considered.txt", delim="\t")
 
 # Get locus numbers for GWAS
-gwas$base_gwas_file = sapply(gwas$base_gwas_file, function(x) {s=strsplit(x, "/"); return(s[[1]][length(s[[1]])])})
-gwas$base_gwas_file = gsub("\\.", "_", gwas$base_gwas_file)
-gwas$base_gwas_file[gwas$trait == "Inflammatory-Bowel-Disease"] = "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Inflammatory-Bowel-Disease"
-gwas$base_gwas_file[gwas$trait == "Crohns-Disease"] = "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Crohns-Disease"
-gwas$base_gwas_file[gwas$trait == "Ulcerative-Colitis"] = "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Ulcerative-Colitis"
+gwas$source_file = sapply(gwas$source_file, function(x) {s=strsplit(x, "/"); return(s[[1]][length(s[[1]])])})
+gwas$source_file = gsub("\\.", "_", gwas$source_file)
 
 # We shouldn't be counting the SNPs from a GWAS if its coloc tests all failed to run in practice
-gwas = gwas[gwas$base_gwas_file %in% all_traits_with_coloc_test,]
-gwas = gwas[!(gwas$base_gwas_file %in% blacklist),]
+gwas = gwas[gwas$source_file %in% all_traits_with_coloc_test,]
+gwas = gwas[!(gwas$source_file %in% blacklist),]
 gwas$locus = floor(gwas$snp_pos / 1000000)
 gwas$full_id = paste(gwas$chr, gwas$locus, sep="_")
+colnames(gwas)[colnames(gwas) == "source_file"] = "base_gwas_file"
 num_gwas_hits = gwas %>% group_by(base_gwas_file) %>% summarize(num_hits = length(unique(full_id)))
 
 
@@ -94,15 +60,11 @@ num_gwas_hits = gwas %>% group_by(base_gwas_file) %>% summarize(num_hits = lengt
 sqtl_coloc = sqtls %>% group_by(ref_snp, base_gwas_file, gwas_trait) %>% summarize(best_coloc_h4 = max(clpp_h4))
 eqtl_coloc = eqtls %>% group_by(ref_snp, base_gwas_file, gwas_trait) %>% summarize(best_coloc_h4 = max(clpp_h4))
 gene_edqtl_coloc = gene_level_edqtls %>% group_by(ref_snp, base_gwas_file, gwas_trait) %>% summarize(best_coloc_h4 = max(clpp_h4))
-cluster_edqtl_coloc = cluster_level_edqtls %>% group_by(ref_snp, base_gwas_file, gwas_trait) %>% summarize(best_coloc_h4 = max(clpp_h4))
-site_edqtl_coloc = site_level_edqtls %>% group_by(ref_snp, base_gwas_file, gwas_trait) %>% summarize(best_coloc_h4 = max(clpp_h4))
 
 # Make matrix containing the best COLOC result for each SNP in
 # any tissue, any feature of a given QTL type
 all_colocs = full_join(sqtl_coloc, eqtl_coloc, by = c("ref_snp", "base_gwas_file", "gwas_trait"), suffix=c("", "_eqtl"))
 all_colocs = full_join(all_colocs, gene_edqtl_coloc, by = c("ref_snp", "base_gwas_file", "gwas_trait"), suffix=c("", "_gene_edqtl"))
-all_colocs = full_join(all_colocs, cluster_edqtl_coloc, by = c("ref_snp", "base_gwas_file", "gwas_trait"), suffix=c("", "_cluster_edqtl"))
-all_colocs = full_join(all_colocs, site_edqtl_coloc, by = c("ref_snp", "base_gwas_file", "gwas_trait"), suffix=c("", "_site_edqtl"))
 colnames(all_colocs)[which(colnames(all_colocs) == "best_coloc_h4")] = "best_coloc_h4_sqtl"
 
 all_colocs$chr = as.numeric(sapply(all_colocs$ref_snp, function(x){strsplit(x, "_")[[1]][1]}))
@@ -113,10 +75,7 @@ all_colocs$locus = floor(all_colocs$snp_pos / 1000000)
 # to keep things simple.
 all_colocs[is.na(all_colocs)] = 0
 
-# Most values are either very close to 1 or very close to 0...
-hist(all_colocs$best_coloc_h4_sqtl)
-
-write.table(all_colocs, file="/users/mgloud/projects/rna_editing/output/qtl_comparisons/best_colocs_per_locus.txt", quote=FALSE, row.names=FALSE, col.names=TRUE, sep="\t")
+write.table(all_colocs, file="output/qtl_comparisons/best_colocs_per_locus.txt", quote=FALSE, row.names=FALSE, col.names=TRUE, sep="\t")
 
 # Repeat the above stuff, but allow at most one colocalization per GWAS to avoid
 # duplications like the fact that most BMI GWAS have 10-50 traits measured, all stratifications of just BMI
@@ -125,40 +84,30 @@ write.table(all_colocs, file="/users/mgloud/projects/rna_editing/output/qtl_comp
 sqtl_coloc_limited = sqtls %>% group_by(chr, locus, base_gwas_file) %>% summarize(best_coloc_h4 = max(clpp_h4), best_snp_sqtl = ref_snp[which.max(clpp_h4)])
 eqtl_coloc_limited = eqtls %>% group_by(chr, locus, base_gwas_file) %>% summarize(best_coloc_h4 = max(clpp_h4), best_snp = ref_snp[which.max(clpp_h4)])
 gene_edqtl_coloc_limited = gene_level_edqtls %>% group_by(chr, locus, base_gwas_file) %>% summarize(best_coloc_h4 = max(clpp_h4) ,best_snp = ref_snp[which.max(clpp_h4)])
-cluster_edqtl_coloc_limited = cluster_level_edqtls %>% group_by(chr, locus, base_gwas_file) %>% summarize(best_coloc_h4 = max(clpp_h4), best_snp = ref_snp[which.max(clpp_h4)])
-site_edqtl_coloc_limited = site_level_edqtls %>% group_by(chr, locus, base_gwas_file) %>% summarize(best_coloc_h4 = max(clpp_h4), best_snp = ref_snp[which.max(clpp_h4)])
 
 all_colocs_limited = full_join(sqtl_coloc_limited, eqtl_coloc_limited, by = c("chr", "locus", "base_gwas_file"), suffix=c("", "_eqtl"))
 all_colocs_limited = full_join(all_colocs_limited, gene_edqtl_coloc_limited, by = c("chr", "locus", "base_gwas_file"), suffix=c("", "_gene_edqtl"))
-all_colocs_limited = full_join(all_colocs_limited, cluster_edqtl_coloc_limited, by = c("chr", "locus", "base_gwas_file"), suffix=c("", "_cluster_edqtl"))
-all_colocs_limited = full_join(all_colocs_limited, site_edqtl_coloc_limited, by = c("chr", "locus", "base_gwas_file"), suffix=c("", "_site_edqtl"))
 colnames(all_colocs_limited)[which(colnames(all_colocs_limited) == "best_coloc_h4")] = "best_coloc_h4_sqtl"
 
 # If not tested at all for that type, give it a 0
 # to keep things simple.
-all_colocs_limited[is.na(all_colocs_limited)] = 0
+all_colocs_limited[,c(4,6,8)][is.na(all_colocs_limited[,c(4,6,8)])] = 0
 
 print(dim(all_colocs))
 print(dim(all_colocs_limited))
 
-# It turns out I guess in most (about 66%) cases we're not dealing with all that much of this doubling where we have multiple
-# traits all colocalizing for the same trait
-
-# Most values are either very close to 1 or very close to 0...
-hist(all_colocs_limited$best_coloc_h4_sqtl)
-
-write.table(all_colocs_limited, file="/users/mgloud/projects/rna_editing/output/qtl_comparisons/best_colocs_per_locus_limited.txt", quote=FALSE, row.names=FALSE, col.names=TRUE, sep="\t")
+write.table(all_colocs_limited, file="output/qtl_comparisons/best_colocs_per_locus_limited.txt", quote=FALSE, row.names=FALSE, col.names=TRUE, sep="\t")
 
 # Make the pairs plot
 plot_matrix = all_colocs[,4:8]
 colnames(plot_matrix) = gsub("best_coloc_h4_", "", colnames(plot_matrix))
 
 
-pdf("/users/mgloud/projects/rna_editing/output/plots/qtl_comparisons/qtl_coloc_comparisons_small.pdf", width=8, height=8)
+pdf("output/plots/qtl_comparisons/qtl_coloc_comparisons_small.pdf", width=8, height=8)
 	pairs(plot_matrix, pch = 16, cex=0.3)
 dev.off()
 
-pdf("/users/mgloud/projects/rna_editing/output/plots/qtl_comparisons/qtl_coloc_comparisons.pdf", width=8, height=8)
+pdf("output/plots/qtl_comparisons/qtl_coloc_comparisons.pdf", width=8, height=8)
 	pairs(plot_matrix, pch = 16, cex=0.5)
 dev.off()
 
@@ -166,11 +115,11 @@ plot_matrix = apply(plot_matrix, c(1,2), function(x) {max(x, 1e-5)})
 plot_matrix = apply(plot_matrix, c(1,2), function(x) {min(x, 1 - 1e-5)})
 logit_plot_matrix = logit(plot_matrix)
 
-pdf("/users/mgloud/projects/rna_editing/output/plots/qtl_comparisons/qtl_coloc_comparisons_logit_small.pdf", width=8, height=8)
+pdf("output/plots/qtl_comparisons/qtl_coloc_comparisons_logit_small.pdf", width=8, height=8)
 	pairs(logit_plot_matrix, pch = 16, cex=0.3)
 dev.off()
 
-pdf("/users/mgloud/projects/rna_editing/output/plots/qtl_comparisons/qtl_coloc_comparisons_logit.pdf", width=8, height=8)
+pdf("output/plots/qtl_comparisons/qtl_coloc_comparisons_logit.pdf", width=8, height=8)
 	pairs(logit_plot_matrix, pch = 16, cex=0.5)
 dev.off()
 
@@ -190,28 +139,34 @@ edqtl_only = all_colocs_limited %>% filter(best_coloc_h4_sqtl < 0.3, best_coloc_
 ### What fraction of edQTL colocs are eQTL colocs, and what fraction of
 ### eQTL colocs are edQTLs?
 
-immune_traits = c("Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Ulcerative-Colitis",
-		  "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Inflammatory-Bowel-Disease",
-		  "Inflammatory-Bowel-Disease_Liu_2015_txt_gz-Crohns-Disease",
-		  "Primary-Sclerosing-Cholangitis_Ji_2017_txt_gz",
-		  "Rheumatoid-Arthritis_Okada_2014_txt_gz",
-		  "Allergies_Ferreira_2017_txt_gz",
-		  "Atopic-Dermatitis_EAGLE_2015_txt_gz",
-		  "Coronary-Artery-Disease_Nikpay_2015_txt_gz",
-		  "Lupus_Bentham_2015_txt_gz",
-		  "Celiac_Trynka_2011_txt_gz",
-		  "Psoriasis_Tsoi_2012_txt_gz",
-		  "Multiple-Sclerosis_Beecham_2013_txt_gz",
-		  "GWAS2_txt_gz",
-		  "GWAS1_txt_gz")
-#immune_disease_code = c("IBD", "PSC", "MS", "RA", "allergy", "eczema", "CAD")
-immune_disease_code = c("UC", "IBD", "Crohns", "PSC", "RA", "allergy", "eczema", "CAD", "Lupus", "Celiac", "Eczema", "Multiple-Sclerosis", "Vitilogo-1", "Vitilogo-2")
+immune_traits = c("Coronary-Artery-Disease_Nelson_2017_txt_gz",
+			"Inflammatory-Bowel-Disease_txt_gz",
+			"Crohns-Disease_txt_gz",
+			"Ulcerative-Colitis_txt_gz", 
+			"Lupus_Bentham_2015_txt_gz", 
+			"Multiple-Sclerosis_txt_gz",
+			"Amyotrophic-Lateral-Sclerosis_Nicolas_2018_txt_gz",
+			"Psoriasis_Tsoi_2012_txt_gz",
+			"Atopic-Dermatitis_EAGLE_2015_txt_gz",
+			"Celiac-Disease_Trynka_2011_txt_gz",
+			"Primary-Sclerosing-Cholangitis_Ji_2017_txt_gz",
+			"Type-1-Diabetes-Meta-Analysis_txt_gz")
 
-other_traits = c("Kidney-Function_Li_2017_txt_gz",
-		 "BMI_Locke_2015_txt_gz",
-		 "Age-At-Menarche_Perry_2014_txt_gz",
-		 "Neuroticism_Luciano_2017_txt_gz")
-other_disease_code = c("impaired kidney function", "BMI", "age at menarche", "neuroticism")
+immune_disease_code = c("CAD", "IBD", "Crohns", "UC", "Lupus", "MS", "ALS", "Psoriasis", "Eczema", "Celiac", "PSC", "T1D") 
+
+other_traits = c("High-Density-Lipoprotein-GWAS-and-Metabochip_txt_gz",
+			"Low-Density-Lipoprotein-GWAS-and-Metabochip_txt_gz",
+			"Total-Cholesterol-GWAS-and-Metabochip_txt_gz",
+			"Triglycerides-GWAS-and-Metabochip_txt_gz",
+			"Depression-Meta-Analysis_txt_gz",
+			"Neuroticism_Luciano_2017_txt_gz",
+			"Parkinsons_Pankratz_2012_txt_gz",
+			"Type-2-Diabetes-Adjusted-For-BMI-European_txt_gz",
+			"Schizophrenia-European_txt_gz",
+			"BMI_txt_gz",
+			"Height_txt_gz")
+
+other_disease_code = c("HDL", "LDL", "TC", "TG", "Depression", "Neuroticism", "Parkinsons", "T2D", "Schizophrenia", "BMI", "Height")
 
 ### Make a stacked barplot ###
 
@@ -486,5 +441,5 @@ count_hits_explained = as.vector(sapply(unique(gene_edqtl_coloc_limited$base_gwa
 
 stack_data = data.frame(subset, condition, percent_hits_explained, count_hits_explained)
 
-write.table(stack_data, file="/users/mgloud/projects/rna_editing/output/plot_data/edqtl_coloc_info.tsv", col.names=TRUE, row.names=FALSE, quote=FALSE, sep="\t")
+write.table(stack_data, file="output/plot-data/edqtl_coloc_info.tsv", col.names=TRUE, row.names=FALSE, quote=FALSE, sep="\t")
 
