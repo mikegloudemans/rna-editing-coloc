@@ -1,6 +1,6 @@
 # Get the splice variants for the regions we're specifically interested in
 
-for f in `ls /users/mgloud/projects/brain_gwas/data/sqtls/gtex_v8/*.sQTLs.txt.gz`; do
+for f in `ls data/sqtls/*.sQTLs.txt.gz`; do
 	tabix $f 1:540642-4540642
 	tabix $f 5:148236753-152236753
 	tabix $f 19:46711017-50711017

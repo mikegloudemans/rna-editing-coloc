@@ -1,10 +1,14 @@
 require(ggplot2)
-require(locuscomparer)
 require(cowplot)
+require(locuscomparer)
+
+# Some added stuff that allows me to modify axes in locuscomparer
 source("lc_mod.R")
 
 # TODO: Figure out a way to make this visible for the public version without
-# having to modify the code to keep tmp files
+# having to modify the code to keep tmp files.
+
+# Probably the way to go is to just provide these files straight out
 
 # Should also be separate functions
 

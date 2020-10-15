@@ -7,7 +7,7 @@ require(ggplot2)
 blacklist = c("Depressive-Symptoms_Okbay_2016_txt_gz")
 
 # Load colocalization matrix
-data = read_delim("output/colocalization/rna-editing-revisions/concatenated/all_coloc_results.txt", delim="\t")
+data = read_delim("output/colocalization/rna-editing-revisions/concatenated/aggregated_coloc_results_50snps.txt", delim="\t")
 data = data[!(data$base_gwas_file %in% blacklist),]
 
 all_traits_with_coloc_test = unique(data$base_gwas_file)
@@ -150,9 +150,10 @@ immune_traits = c("Coronary-Artery-Disease_Nelson_2017_txt_gz",
 			"Atopic-Dermatitis_EAGLE_2015_txt_gz",
 			"Celiac-Disease_Trynka_2011_txt_gz",
 			"Primary-Sclerosing-Cholangitis_Ji_2017_txt_gz",
+			"Primary-Biliary-Cirrhosis_Cordell_2015.txt.gz",
 			"Type-1-Diabetes-Meta-Analysis_txt_gz")
 
-immune_disease_code = c("CAD", "IBD", "Crohns", "UC", "Lupus", "MS", "ALS", "Psoriasis", "Eczema", "Celiac", "PSC", "T1D") 
+immune_disease_code = c("CAD", "IBD", "Crohns", "UC", "Lupus", "MS", "ALS", "Psoriasis", "Eczema", "Celiac", "PSC", "PBC", "T1D") 
 
 other_traits = c("High-Density-Lipoprotein-GWAS-and-Metabochip_txt_gz",
 			"Low-Density-Lipoprotein-GWAS-and-Metabochip_txt_gz",
@@ -400,6 +401,10 @@ g = ggplot(stack_data, aes(fill=condition, y=percent_hits_explained, x=disease),
 	ylab("% GWAS hits explained") +
 	geom_text(aes(label=count_hits_explained, y=total_percent_hits_explained+0.02), vjust=1.6, color="black", size=3.5)
 g
+
+ggsave("output/plots/quantify_gwas_explained/panel3a.pdf", height=6, width=6)
+
+stopifnot(FALSE)
 
 ####
 all_disease_edqtl_colocs = list()

@@ -38,7 +38,7 @@ python bin/coloc-pipeline/dispatch.py scripts/colocalization/config/rna-coloc.co
 python scripts/colocalization/compilation/concatenate_results.py
 
 # Filter down to sites containing 50 or more tested SNPs
-python scripts/colocalization/compilation/threshold_by_snp_count.sh
+bash scripts/colocalization/compilation/threshold_by_snp_count.sh
 
 ##############################
 # General post-analysis
@@ -55,15 +55,16 @@ Rscript scripts/post-coloc/interesting_ibd_loci/stack_ibd_loci.R
 # TODO: update stuff from here...
 
 # Locus-Compare plots for loci in figures 3C and 4B
-bash colocalization/custom_coloc_tests/get_ibd_splice_variants.sh > ../output/colocalization/custom_coloc_tests/ibd_splice_variants.txt
-python ../bin/coloc-pipeline/dispatch.py colocalization/custom_coloc_tests/figure-3c/interesting-ibd-loci-abridged-3c.config 1
-python ../bin/coloc-pipeline/dispatch.py colocalization/custom_coloc_tests/figure-4b/interesting-ibd-loci-abridged-4b.config 1
-Rscript colocalization/custom_coloc_tests/plot-3c-4b.R
+bash scripts/colocalization/custom_coloc_tests/get_ibd_splice_variants.sh > output/colocalization/custom_coloc_tests/ibd_splice_variants.txt
+
+python bin/coloc-pipeline/dispatch.py scripts/colocalization/custom_coloc_tests/figure-3c/interesting-ibd-loci-abridged-3c.config 1
+python bin/coloc-pipeline/dispatch.py scripts/colocalization/custom_coloc_tests/figure-4b/interesting-ibd-loci-abridged-4b.config 1
+
+Rscript scripts/colocalization/custom_coloc_tests/plot-3c-4b.R
 
 # Supplementary Tables
-Rscript manuscript/supp-tables/create_supp_data.sh	# Compile COLOC results for supplementary table
-Rscript post-coloc/interesting_ibd_loci/prioritize_ibd_loci.R  # Used for IBD Supplementary Data Tables
-
+bash scripts/manuscript/supp-tables/create_supp_data.sh		# Compile COLOC results for supplementary table
+Rscript scripts/post-coloc/interesting_ibd_loci/prioritize_ibd_loci.R   # Used for IBD Supplementary Data Tables
 
 ##############################
 # Additional analysis not included in paper
