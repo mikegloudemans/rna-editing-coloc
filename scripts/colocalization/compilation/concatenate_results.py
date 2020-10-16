@@ -10,11 +10,6 @@ coloc_concat_file = "output/colocalization/rna-editing-revisions/concatenated/al
 # No line should be written twice
 lines = set([])
 
-# Raw input files
-coloc_raw_output_directory = "../../../output/colocalization/main_coloc_results/raw_coloc_output"
-# Where to place processed output files
-coloc_processed_output_directory = "../../../output/colocalization/main_coloc_results/aggregated"
-
 with open(coloc_concat_file, "w") as w:
 	with open(header_file) as f:
 		header = f.readline()

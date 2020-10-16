@@ -45,14 +45,10 @@ bash scripts/colocalization/compilation/threshold_by_snp_count.sh
 ##############################
 
 # Figure 3A
-Rscript scripts/post-coloc/quantify_gwas_explained/compare_qtl_types.R
-
-# Figure 3B
+Rscript scripts/post-coloc/quantify_gwas_explained/compare_qtl_types.R # Figure 3B
 # first "prioritize" then "stack"
 Rscript scripts/post-coloc/interesting_ibd_loci/prioritize_ibd_loci.R
 Rscript scripts/post-coloc/interesting_ibd_loci/stack_ibd_loci.R
-
-# TODO: update stuff from here...
 
 # Locus-Compare plots for loci in figures 3C and 4B
 bash scripts/colocalization/custom_coloc_tests/get_ibd_splice_variants.sh > output/colocalization/custom_coloc_tests/ibd_splice_variants.txt
@@ -69,15 +65,15 @@ Rscript scripts/post-coloc/interesting_ibd_loci/prioritize_ibd_loci.R   # Used f
 ##############################
 # Additional analysis not included in paper
 ##############################
-Rscript check_qtl_overlaps/compare_qtl_types/compare_qtl_types.R
 
-# EDA for Huang et al IBD loci
-Rscript post-coloc/interesting_ibd_loci/annotate_huang_ibd_loci.R  # Overlapping with existing annotations
+Rscript scripts/check_qtl_overlaps/compare_qtl_types/compare_qtl_types.R
+Rscript scripts/post-coloc/interesting_ibd_loci/annotate_huang_ibd_loci.R  # Overlapping with existing annotations
 
 # pi1 replication
-python post-coloc/check_qtl_p1_overlaps/get_top_sig_edqtls.py
-python post-coloc/check_qtl_p1_overlaps/check_qtl_overlaps.py
-python post-coloc/check_qtl_p1_overlaps/perform_pi1_tests.R
+python scripts/post-coloc/check_qtl_p1_overlaps/get_top_sig_edqtls.py
+python scripts/post-coloc/check_qtl_p1_overlaps/check_qtl_overlaps.py
+python scripts/post-coloc/check_qtl_p1_overlaps/perform_pi1_tests.R
 
 # Direction-of-effect assessment
-python post-coloc/direction_of_effect/edqtl_gwas_direction_comparison.py
+# Replaced though for the final paper
+python scripts/post-coloc/direction_of_effect/edqtl_gwas_direction_comparison.py

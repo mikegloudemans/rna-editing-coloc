@@ -714,6 +714,8 @@ def test_hit(hit, zscore_cutoff, clusters, coloc_results=None, output_full_zscor
     else:
         my_agreement["majority"]["na"] += 1
 
+    
+
     #########################################
     # Test: binomial, tissue-combined
     #########################################
@@ -778,6 +780,27 @@ def test_hit(hit, zscore_cutoff, clusters, coloc_results=None, output_full_zscor
         print this_clust, this_snp, binom_p
 
     my_agreement["binomial-best-cluster"][best_dir] += 1
+
+    kg_snps = subprocess.check_output("tabix data/1KG/hg38/ALL.chr{0}_GRCh38.genotypes.20170504.vcf.gz {0}:{1}-{1}".format(hit[0], hit[1]), shell=True).strip().split("\n")
+    gwas_alt_minor = -1
+    for kgss in kg_snps:
+        if kgss.strip() == "":
+            continue
+        kgs = kgss.strip().split()
+        if kgs[3] == gwas_ref and kgs[4] == gwas_alt:
+            gwas_alt_minor = float(kgs[7].split(";")[1].replace("AF=", "")) < 0.5
+            break
+        elif kgs[3] == gwas_alt and kgs[4] == gwas_ref:
+            gwas_alt_minor = 1-float(kgs[7].split(";")[1].replace("AF=", "")) < 0.5
+            break
+
+    if not gwas_alt_minor == -1:
+        # Does minor allele increase risk?
+        minor_increases_risk = not (gwas_alt_minor ^ gwas_alt_increases_risk)
+        # Does minor allele increase editing?
+        minor_increases_editing = not (gwas_alt_minor ^ gwas_alt_increases_editing)
+        with open("patterns.out", "a") as a:
+            a.write("{0}\t{1}\t{2}\t{3}\n".format(minor_increases_risk, minor_increases_editing, best_dir, hit[3]))
 
     # Final test results include all the different test modes
     return my_agreement, tissue_combined 
