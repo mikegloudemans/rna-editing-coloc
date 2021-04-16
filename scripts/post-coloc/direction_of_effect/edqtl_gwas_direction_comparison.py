@@ -21,7 +21,7 @@ import pickle
 #############################
 
 # Output z-scores for every site?
-output_full_zscores = False
+output_full_zscores = True
 
 # Should we look only at GWS hits, rather than tile across
 # the entire genome and test effects in every 1MB window?
